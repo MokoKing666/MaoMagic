@@ -161,6 +161,83 @@ blur(24.dp.toPx())  // 包在外层
 反过来写 `blur(); vibrancy()` 会得到 `colorFilter(blur(source))`，
 色滤被挪到 blur 之外，**违反**库的强制顺序。不要"顺手调换"。
 
+### 9. `lens()` 的折射量必须夹到**元素短边的 1/4**
+
+```kotlin
+// ❌ 错：对底部 Tab 栏来说 minDimension 就是栏高，折射量被放到整个栏高
+val amount = lensAmount.toPx().coerceAtMost(size.minDimension)
+
+// ✅ 对
+val amount = lensAmount.toPx().coerceAtMost(size.minDimension * 0.25f)
+```
+
+**后果不是「折射太强」，而是整条栏发灰蓝。**
+
+原因在 shader 里：开了 `chromaticAberration` 之后，
+`RoundedRectRefractionWithDispersion` 会在 `refractedCoord ± dispersedCoord × k`
+处**分别采样 R / G / B 共 7 次**（见库内 `Shaders.kt`）。
+采样跨度正比于折射量 —— 折射量 168px 时，RGB 的采样点相距可达 168px，**已经跨出栏外**。
+于是「栏上方亮、栏下方暗」这个明暗梯度被当成色差读了出来。
+
+**为什么只在深色主题暴露**：亮色 `surfaceAlphaLight = 0.62` 的白遮罩把它盖住了；
+深色 `surfaceAlphaDark = 0.08` 几乎不遮。
+
+实测（深色，底栏中心）：
+
+| 条件 | 采样 | R−B | 判定 |
+|---|---|---|---|
+| 夹到 `minDimension`（原实现） | `rgb(82,91,94)` | **−12** | 冷 ✗ |
+| 夹到 `minDimension × 0.25` | `rgb(72,72,64)` | **+8** | 暖 ✓ |
+| 完全关掉 `lens()` | `rgb(72,72,64)` | +8 | 暖 ✓ |
+| 只关 `chromaticAberration` | `rgb(72,72,64)` | +8 | 暖 ✓ |
+
+收窄折射量优于关掉色散：**保留了 iOS 的色边签名**，只消除伪影。
+
+### 10. 定位渲染异常的通用方法
+
+同参数不同结果是关键线索。顶部导航栏（`RectangleShape` → 跳过 `lens`）正常，
+底部 Tab 栏（`CornerBasedShape` → 跑 `lens`）异常 —— 变量就在这一步。
+
+流程：**先按渲染路径二分，再改参数。** 不要凭感觉调数值。
+
+采样工具：`adb exec-out screencap -p` + Pillow 取区域均值，
+判据用 `R−B` 符号（暖色主题下所有中性色必须 R > B）。
+
+### 11. 字体：宋体正文 + 黑体标题，且**层级不建立在 `fontWeight` 上**
+
+| 族 | 字体 | 用途 |
+|---|---|---|
+| `MagicText`（默认） | Normal/Medium → 新致宋；SemiBold/Bold → 新晰黑 | 全应用默认 |
+| `MagicSerif` | 纯新致宋 | 只在「不论字重都要宋体」时显式使用 |
+| `MagicSans` | 纯新晰黑 | UI 标签、按钮 |
+
+**为什么默认族要「字重自动换字面」**：两个字体**都只有单字重**。
+若把层级建立在 `fontWeight` 上，Android 会走**合成加粗** ——
+宋体横画本来就细，合成加粗会把横竖一起撑粗，糊成一团，直接违反「可读性高于一切」。
+换成黑体得到**真实的字面差异**，且符合中文书籍「黑体标题 + 宋体正文」的传统配对。
+
+⚠️ 这是**隐式替换**：改 `fontWeight` 会连带换字面。
+「宋体且加粗」做不到 —— 要么换字号，要么接受黑体。
+
+### 12. `LocalTextStyle` 必须显式下发，否则字体白装
+
+`MaterialTheme` 只提供 `LocalTypography`，**不提供 `LocalTextStyle`**。
+而项目里大量 `Text(fontSize = …, fontWeight = …)` 并没有传 `style` ——
+它们读的是 `LocalTextStyle`，不显式下发就会退回系统默认字体。
+
+**装完字体一定要检查这一条**，否则界面上大部分文字根本没换。
+
+### 13. 字体子集化后必须做穷尽验证
+
+子集化的风险是**缺字变豆腐块**。本项目实测踩到过：GB2312 里**没有「夬」**（泽天夬），
+直接子集会让六十四卦名缺一个。
+
+验证脚本 `tools/verify_subset.py` 的判据：
+**字符集里每个字都必须进子集；汉字缺失数 = 0，卦符缺失数 = 0。**
+（非 CJK 符号允许缺失，走系统 fallback。）
+
+新增大量古典文本（卦辞、爻辞）后**必须重跑子集化与验证**。
+
 ---
 
 ## 二、间距与排版

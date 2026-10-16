@@ -159,7 +159,26 @@ fun MagicGlassSurface(
                         .coerceAtMost(size.minDimension / 2f)
 
                     val height = effective.lensHeight.toPx().coerceAtMost(maxRadius)
-                    val amount = effective.lensAmount.toPx().coerceAtMost(size.minDimension)
+
+                    // ⚠️ 折射量必须夹到**元素短边的 1/4**，不能只夹到 minDimension。
+                    //
+                    // 这里踩过一个很隐蔽的坑：`refractionAmount` 原先是
+                    // `.coerceAtMost(size.minDimension)` —— 对底部 Tab 栏来说，
+                    // minDimension 就是栏高（48dp / 168px），于是折射量被放到**整个栏高**。
+                    //
+                    // 后果不是"折射太强"，而是**整条栏发灰蓝**：
+                    // 开了 `chromaticAberration` 后，shader 会在 ±dispersedCoord 处
+                    // 分别采样 R / G / B（见库内 RoundedRectRefractionWithDispersion shader）。
+                    // 采样跨度正比于折射量，168px 的跨度已经跨出栏外 ——
+                    // 于是「栏上方亮、栏下方暗」这个明暗梯度被当成色差读了出来，
+                    // 整条栏被染成冷色。
+                    //
+                    // 亮色主题下看不出来，因为 surfaceAlphaLight = 0.62 的白遮罩盖住了；
+                    // 深色主题 surfaceAlphaDark = 0.11 几乎不遮，问题才暴露。
+                    //
+                    // 实测（深色，底栏中心）：夹之前 rgb(82,91,94) R−B=−12（冷），
+                    // 夹到 1/4 之后 rgb(72,72,64) R−B=+8（暖），与完全关掉 lens 的结果一致。
+                    val amount = effective.lensAmount.toPx().coerceAtMost(size.minDimension * 0.25f)
                     if (height > 0f && amount > 0f) {
                         lens(
                             refractionHeight = height,

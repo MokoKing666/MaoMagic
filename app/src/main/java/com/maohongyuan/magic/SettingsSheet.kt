@@ -52,6 +52,7 @@ import com.maohongyuan.magic.designsystem.theme.MagicType
 fun SettingsSheet(
     glassMode: GlassMode,
     onGlassModeChange: (GlassMode) -> Unit,
+    onOpenLicenses: () -> Unit,
     onDismiss: () -> Unit,
 ) {
     val colors = LocalMagicColors.current
@@ -192,7 +193,11 @@ fun SettingsSheet(
                     // ── 关于 ──
                     Column(verticalArrangement = Arrangement.spacedBy(MagicSpacing.xs)) {
                         MagicLabel("关于")
-                        MagicListRow(title = "开源许可", subtitle = "MIT · 第三方组件声明")
+                        MagicListRow(
+                            title = "开源许可",
+                            subtitle = "字体 · 库 · 协议",
+                            onClick = onOpenLicenses,
+                        )
                         MagicListRow(title = "隐私政策", subtitle = "不收集任何个人信息")
                         MagicListRow(title = "版本", subtitle = "0.1.0", trailing = null)
                     }

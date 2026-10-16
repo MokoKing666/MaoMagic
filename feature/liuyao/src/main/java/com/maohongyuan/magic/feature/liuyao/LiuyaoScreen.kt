@@ -327,12 +327,14 @@ private fun HexagramCard() {
         Spacer(Modifier.height(MagicSpacing.md))
 
         // ── 表头 ──
+        // 与数据行共用同一份 YaoCols，否则改一处漏一处，列就错位
         Row(modifier = Modifier.fillMaxWidth()) {
-            MagicHeaderCell("六神", weight = 0.85f)
-            MagicHeaderCell("六亲", weight = 0.9f)
-            MagicHeaderCell("世应", weight = 0.55f)
-            MagicHeaderCell("本卦", weight = 1.5f)
-            MagicHeaderCell("变卦", weight = 1.5f)
+            MagicHeaderCell("六神", weight = YaoCols.SHEN)
+            MagicHeaderCell("六亲", weight = YaoCols.QIN)
+            MagicHeaderCell("世应", weight = YaoCols.SHI)
+            MagicHeaderCell("本卦", weight = YaoCols.GUA)
+            Spacer(Modifier.width(YaoCols.GAP))
+            MagicHeaderCell("变卦", weight = YaoCols.BIAN)
         }
         Spacer(Modifier.height(MagicSpacing.xs))
         MagicDivider()
@@ -364,14 +366,18 @@ private fun YaoTableRow(yao: YaoRowData) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = MagicSpacing.md),
-        verticalAlignment = Alignment.CenterVertically,
+        // ⚠️ 必须是 Top，不能是 CenterVertically。
+        // 本卦列与变卦列的行数不同（本卦 2~3 行，变卦恒 3 行），
+        // 用 CenterVertically 会把两个高度不同的 Column 各自垂直居中，
+        // 结果两列的爻线错开约 15~20px —— 纵向扫读时基线全乱。
+        verticalAlignment = Alignment.Top,
     ) {
         // 六神
         Text(
             text = yao.liuShen,
             fontSize = MagicType.footnote.sp,
             color = colors.tertiaryText,
-            modifier = Modifier.weight(0.85f),
+            modifier = Modifier.weight(YaoCols.SHEN),
         )
 
         // 六亲
@@ -380,11 +386,11 @@ private fun YaoTableRow(yao: YaoRowData) {
             fontSize = MagicType.footnote.sp,
             fontWeight = FontWeight.Medium,
             color = colors.secondaryText,
-            modifier = Modifier.weight(0.9f),
+            modifier = Modifier.weight(YaoCols.QIN),
         )
 
         // 世应
-        Box(modifier = Modifier.weight(0.55f)) {
+        Box(modifier = Modifier.weight(YaoCols.SHI)) {
             if (yao.shiYing != null) {
                 MagicBadge(
                     text = yao.shiYing,
@@ -400,8 +406,13 @@ private fun YaoTableRow(yao: YaoRowData) {
             tint = if (yao.moving) colors.accent else colors.primaryText,
             sub = yao.fuShen,
             subColor = colors.inauspicious,
-            modifier = Modifier.weight(1.5f),
+            modifier = Modifier.weight(YaoCols.GUA),
         )
+
+        // 本卦与变卦之间必须留间距。
+        // 两个 weight 相邻且无间隙时，两列爻线首尾相接，
+        // 视觉上是一条被切断的长线，读者分不清哪段属于本卦。
+        Spacer(Modifier.width(YaoCols.GAP))
 
         // 变卦
         YaoCell(
@@ -410,7 +421,7 @@ private fun YaoTableRow(yao: YaoRowData) {
             tint = colors.secondaryText,
             sub = yao.bianLiuQin,
             subColor = colors.tertiaryText,
-            modifier = Modifier.weight(1.5f),
+            modifier = Modifier.weight(YaoCols.BIAN),
         )
     }
 }
@@ -421,6 +432,38 @@ private fun YaoTableRow(yao: YaoRowData) {
  * 爻线用 Canvas 绘制而非 Unicode 字符 —— 字符在不同字体下宽度与粗细都不一致，
  * 无法保证多行纵向对齐。
  */
+/**
+ * 卦盘表的列定义。
+ *
+ * 表头与数据行**必须引用同一份** —— 早期两处各写一遍 weight 字面量，
+ * 改一处漏一处，列立刻错位。
+ */
+private object YaoCols {
+    const val SHEN = 0.85f
+    const val QIN = 0.9f
+    const val SHI = 0.55f
+    const val GUA = 1.4f
+    const val BIAN = 1.4f
+
+    /** 本卦与变卦之间的间距 */
+    val GAP = MagicSpacing.md
+}
+
+// 单元格固定三槽。**没有内容也必须占位** —— 高度一旦由内容决定，
+// 六行的行高就会各不相同（有的爻有伏神、有的没有），纵向扫读时基线一直在跳。
+private val YaoLineSlot = 20.dp
+private val YaoTextSlot = 18.dp
+private val YaoSubSlot = 16.dp
+
+/**
+ * 单爻单元格：爻线图形 + 干支 + 副行（伏神 / 变卦六亲）。
+ *
+ * 爻线用 Canvas 绘制而非 Unicode 字符 —— 字符在不同字体下宽度与粗细都不一致，
+ * 无法保证多行纵向对齐。
+ *
+ * ⚠️ 三个槽位全部用固定高度的 Box 包住，保证**任何内容组合下高度都相同**。
+ *    这是六行爻线能落在同一组水平线上的前提。
+ */
 @Composable
 private fun YaoCell(
     yang: Boolean,
@@ -430,28 +473,36 @@ private fun YaoCell(
     subColor: Color,
     modifier: Modifier = Modifier,
 ) {
-    val colors = LocalMagicColors.current
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        YaoLine(
-            yang = yang,
-            color = tint,
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(6.dp),
-        )
-        Text(
-            text = ganZhi,
-            fontSize = MagicType.caption.sp,
-            fontWeight = FontWeight.Medium,
-            color = tint,
-        )
-        if (sub != null) {
-            Text(
-                text = sub,
-                // 字号下限 12sp —— 低于此值在玻璃上不可读
-                fontSize = MagicType.caption.sp,
-                color = subColor,
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Box(
+            modifier = Modifier.height(YaoLineSlot),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+            YaoLine(
+                yang = yang,
+                color = tint,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp),
             )
+        }
+        Box(modifier = Modifier.height(YaoTextSlot)) {
+            Text(
+                text = ganZhi,
+                fontSize = MagicType.caption.sp,
+                fontWeight = FontWeight.Medium,
+                color = tint,
+            )
+        }
+        Box(modifier = Modifier.height(YaoSubSlot)) {
+            if (sub != null) {
+                Text(
+                    text = sub,
+                    // 字号下限 12sp —— 低于此值在玻璃上不可读
+                    fontSize = MagicType.caption.sp,
+                    color = subColor,
+                )
+            }
         }
     }
 }

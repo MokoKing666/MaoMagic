@@ -130,8 +130,13 @@ val DarkMagicColors = MagicColors(
     glassShadow = Color(0x40000000),
     divider = Color(0x3DE8DDCE),
 
-    backdropBase = Color(0xFF1A1613),
-    backdropGradientEnd = Color(0xFF241E19),
+    // 深色底「暖墨」。实测：原值 #1A1613 时，卡片（白 0.08 抬升）只比背景亮约 20 阶，
+    // 层级几乎看不见 —— 卡片读作「背景上一块浅一点的区域」，而不是「抬起的面板」。
+    //
+    // 修法选择**压暗背景**而不是继续抬高卡片：压暗同时提升所有文字对比度，
+    // 且不牺牲玻璃的透度；抬高卡片则相反（卡片越亮，浅色文字的对比度越低）。
+    backdropBase = Color(0xFF121009),
+    backdropGradientEnd = Color(0xFF1B1611),
     blob1 = Color(0x4D5A4A32),
     blob2 = Color(0x403F2E2A),
     blob3 = Color(0x3A3A4A38),

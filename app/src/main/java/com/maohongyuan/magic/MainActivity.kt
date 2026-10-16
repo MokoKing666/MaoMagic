@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-/** Tab 用简称；页面大标题用全称。两者刻意区分，避免底部栏文字过长。 */
+/** Tab 用简称。页面大标题（全称）由各页面自己的 MagicPageHeader 承担。 */
 private val Tabs = listOf(
     LiquidTab(label = "六爻", icon = MagicTabIcon.SIX_YAO),
     LiquidTab(label = "八字", icon = MagicTabIcon.FOUR_PILLARS),
@@ -38,16 +38,14 @@ private val Tabs = listOf(
     LiquidTab(label = "黄历", icon = MagicTabIcon.ALMANAC),
 )
 
-private val TabTitles = listOf("六爻起卦", "八字命盘", "梅花易数", "今日黄历")
-
 @Composable
 private fun MagicApp() {
     var tab by remember { mutableIntStateOf(0) }
     var glassMode by remember { mutableStateOf(GlassMode.FULL) }
     var showSettings by remember { mutableStateOf(false) }
+    var showLicenses by remember { mutableStateOf(false) }
 
     MagicScaffold(
-        title = TabTitles[tab],
         tabs = Tabs,
         selectedTab = tab,
         onSelectTab = { tab = it },
@@ -58,8 +56,12 @@ private fun MagicApp() {
                 SettingsSheet(
                     glassMode = glassMode,
                     onGlassModeChange = { glassMode = it },
+                    onOpenLicenses = { showLicenses = true },
                     onDismiss = { showSettings = false },
                 )
+            }
+            if (showLicenses) {
+                LicenseScreen(onDismiss = { showLicenses = false })
             }
         },
     ) { scrollState ->

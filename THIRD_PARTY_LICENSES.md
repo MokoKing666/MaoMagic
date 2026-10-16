@@ -3,6 +3,12 @@
 本项目（猫仙幻术 / com.maohongyuan.magic）以 **MIT** 协议开源。
 以下为项目直接依赖的第三方组件及其许可信息。
 
+> ⚠️ **其中字体部分（第 3 节）有强制义务，不是普通声明。**
+> 嵌入 IPA Font License 1.0 的字体时，必须随 App 提供协议全文/URL，
+> **并且**提供让使用者恢复到原始 IPA 字体的方法。
+> 本项目已在设置页「开源许可」内实现这两项（`LicenseScreen.kt`）。
+> 删改该页面前请先读第 3 节。
+
 ---
 
 ## 1. lunar (cn.6tail:lunar)
@@ -71,7 +77,48 @@ limitations under the License.
 
 ---
 
-## 3. 其它运行时依赖
+## 3. 字体（IPA Font License 1.0 —— **有强制义务**）
+
+### 霞鹜新致宋 屏幕阅读版 / 霞鹜新晰黑 屏幕阅读版
+
+- **用途**：正文与标题（新致宋，宋体）；Tab 标签、按钮等 UI 小字（新晰黑，黑体）
+- **作者**：落霞孤鹜（lxgw）
+- **仓库**：https://github.com/lxgw/LxgwNeoXiZhi-Screen
+- **许可**：**IPA Font License 1.0**（原始授权字体为 IPAmj明朝）
+- **协议全文**：https://opensource.org/licenses/ipa ｜ https://moji.or.jp/ipafont/license
+- **已做子集化**：原始 20.7 MB + 11.0 MB → 3.00 MB + 1.83 MB。
+  子集 = GB2312 全字符集 + 项目源码字符 + 术数专用词表 + 64 卦符 / 8 八卦符号。
+  子集化属于协议允许的「派生程序」。重新生成见 `tools/subset_fonts.py`。
+
+### ⚠️ 嵌入 App 的两项强制义务
+
+IPA Font License 1.0 第 3 条第 1 款第 2 项 + FAQ §3.3.2：
+
+> 利用者が派生プログラム利用時に、自身の意志でオリジナル状態の IPA フォントに
+> 戻せない派生プログラムの再配布は禁止されております。
+>
+> （使用者无法自愿将字体恢复为原始 IPA 字体时，禁止再分发该派生程序。）
+
+因此嵌入 App **必须同时满足两项**，缺一即为违规分发：
+
+| # | 义务 | 本项目实现位置 |
+|---|---|---|
+| 1 | 附上协议全文或 URL | `app/.../LicenseScreen.kt` → 「字体」小节 |
+| 2 | 提供恢复到 IPA 原始字体的方法 | `app/.../LicenseScreen.kt` → 「字体的恢复方法」小节 |
+
+第 2 项采用的官方方案一（在许可页附英文说明）：
+
+```
+To replace this font with the original IPA font, please get the original font from
+https://moji.or.jp/ipafont/ipafontdownload/ and replace the font file in <directory>.
+```
+
+> **删改 `LicenseScreen.kt` 前请先确认这两项仍然存在。**
+> 另：字体文件位于 `designsystem/src/main/res/font/`，不得从仓库中移除授权声明后单独分发。
+
+---
+
+## 4. 其它运行时依赖
 
 以下组件通过 AndroidX / Kotlin 官方渠道以 Apache-2.0 协议发布：
 
@@ -84,7 +131,7 @@ limitations under the License.
 
 ---
 
-## 4. 关于端上模型
+## 5. 关于端上模型
 
 本项目的**仓库与 APK 均不包含任何模型权重文件**。
 

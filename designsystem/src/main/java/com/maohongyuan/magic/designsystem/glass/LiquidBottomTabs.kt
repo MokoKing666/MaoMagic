@@ -9,7 +9,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -101,6 +101,7 @@ fun LiquidBottomTabs(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    onOpenSettings: (() -> Unit)? = null,
 ) {
     val shapes = LocalMagicShapes.current
     val colors = LocalMagicColors.current
@@ -152,7 +153,8 @@ fun LiquidBottomTabs(
         indicatorX.animateTo(
             targetValue = target,
             animationSpec = spring(
-                dampingRatio = 0.78f,
+                // 0.78 → 0.62：回弹更明确，"在动"这件事才看得出来
+                dampingRatio = 0.62f,
                 stiffness = Spring.StiffnessMediumLow,
             ),
         )
@@ -186,8 +188,24 @@ fun LiquidBottomTabs(
                         .width(itemWidthDp * indicatorStretch.value)
                         .height(IndicatorHeight)
                         .clip(indicatorShape)
-                        .background(Color.White.copy(alpha = 0.30f))
-                        .border(1.dp, colors.glassStroke, indicatorShape),
+                        // 指示器的填充必须与它所在的表面拉开对比，否则"看不出在动"。
+                        //
+                        // 这里踩过一个坑：原值亮色下用 `White 0.30` ——
+                        // 底栏本身是浅色玻璃（淡米粉底上接近白），
+                        // 再叠 30% 白等于没叠。指示器就算在滑动，视觉上也几乎不可见，
+                        // 用户会误以为"没有滑动动画"。
+                        //
+                        // 亮色：白 0.72，比底栏明显更亮；
+                        // 深色：白 0.14，比底栏略微更亮（暗色下过亮会刺眼）。
+                        .background(
+                            Color.White.copy(alpha = if (colors.isLight) 0.72f else 0.14f)
+                        )
+                        // 描边加粗到 1.5dp 并用强调色，让边界在任何底色上都可辨
+                        .border(
+                            width = 1.5.dp,
+                            color = colors.accent.copy(alpha = 0.20f),
+                            shape = indicatorShape,
+                        ),
                 )
             }
 
@@ -202,6 +220,7 @@ fun LiquidBottomTabs(
                         tab = tab,
                         selected = index == selectedIndex,
                         onClick = { onSelect(index) },
+                        onLongClick = onOpenSettings,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -216,6 +235,7 @@ private fun LiquidTabItem(
     selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val colors = LocalMagicColors.current
     val interaction = remember { MutableInteractionSource() }
@@ -243,10 +263,13 @@ private fun LiquidTabItem(
         modifier = modifier
             .height(IndicatorHeight)
             .clip(RoundedCornerShape(IndicatorHeight / 2))
-            .clickable(
+            .combinedClickable(
                 interactionSource = interaction,
                 indication = null,
                 onClick = onClick,
+                // 长按任一 Tab 图标 → 打开设置。
+                // 这是快捷方式；主入口是每个页面末尾的设置条目（发现性更好）。
+                onLongClick = onLongClick,
             ),
         contentAlignment = Alignment.Center,
     ) {

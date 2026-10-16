@@ -25,13 +25,13 @@
 
 ## 界面
 
-| 六爻起卦 | 八字命盘 | 梅花易数 |
-|---|---|---|
-| ![六爻](docs/screenshots/01-liuyao.png) | ![八字](docs/screenshots/02-bazi.png) | ![梅花](docs/screenshots/03-meihua.png) |
-
-| 今日黄历 | 六爻卦盘 | 设置 | 深色主题 |
+| 六爻起卦 | 八字命盘 | 梅花易数 | 今日黄历 |
 |---|---|---|---|
-| ![黄历](docs/screenshots/04-almanac.png) | ![卦盘](docs/screenshots/05-liuyao-hexagram.png) | ![设置](docs/screenshots/06-settings.png) | ![深色](docs/screenshots/07-dark.png) |
+| ![六爻](docs/screenshots/01-liuyao.png) | ![八字](docs/screenshots/02-bazi.png) | ![梅花](docs/screenshots/03-meihua.png) | ![黄历](docs/screenshots/04-almanac.png) |
+
+| 页面末尾设置入口 | 设置 | 深色主题 | 开源许可 |
+|---|---|---|---|
+| ![设置入口](docs/screenshots/05-settings-entry.png) | ![设置](docs/screenshots/06-settings.png) | ![深色](docs/screenshots/07-dark.png) | ![许可](docs/screenshots/08-license.png) |
 
 > **当前进度：界面已完成，功能未接线。** 四个模块的排盘/起卦/解卦结果均为静态示例数据，
 > 按钮为占位。算法内核（`core:calendar` / `core:hexagram` / `core:interpret`）尚在开发中。
@@ -44,8 +44,14 @@
 - **只允许两层玻璃，且不得相邻嵌套**（No Glass on Glass）—— 卡片内部的控件一律实心填充
 - **同心圆角** —— `r_child = r_parent − padding`，圆心必须重合
 - **圆角用连续曲率**（`MagicSmoothCornerShape`），不用正圆弧
+- **`lens()` 的折射量必须夹到元素短边的 1/4** —— 否则色散会把周围明暗差读成色差，整片发灰蓝
 - **吉凶一律「颜色 + 字形」双通道** —— 颜色永远不单独承载语义
 - **背景必须低饱和且有细节** —— 玻璃靠折射背景成立，纯色背景上做玻璃等于没做
+- **宋体正文 + 黑体标题**，层级不建立在 `fontWeight` 上（单字重字体合成加粗会糊）
+
+字体采用 **霞鹜新致宋 / 霞鹜新晰黑 屏幕阅读版**（子集化后 3.00 MB + 1.83 MB，
+0 汉字缺失、0 卦符缺失）。该字体为 **IPA Font License 1.0**，
+App 内已按协议要求提供全文与恢复原始字体的方法，见 [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md#3-字体ipa-font-license-10--有强制义务)。
 
 详见 [docs/UI-DESIGN-RULES.md](docs/UI-DESIGN-RULES.md)。
 

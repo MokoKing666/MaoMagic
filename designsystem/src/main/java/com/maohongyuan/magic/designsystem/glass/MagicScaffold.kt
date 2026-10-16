@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,19 +23,19 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maohongyuan.magic.designsystem.theme.LocalMagicColors
+import com.maohongyuan.magic.designsystem.theme.LocalMagicShapes
 import com.maohongyuan.magic.designsystem.theme.MagicSpacing
 import com.maohongyuan.magic.designsystem.theme.MagicType
 
@@ -54,11 +55,22 @@ object MagicScaffoldDefaults {
      */
     val ContentBottomPadding: Dp = TabBarHeight + TabBarMargin + 16.dp
 
-    /** 大标题折叠行程。滚动超过这个距离，inline 导航栏完全显现。 */
-    val HeaderHeight: Dp = 96.dp
+    /** 顶部渐隐遮罩高度。内容滚过时淡出，而不是硬切在状态栏下。 */
+    val TopScrimHeight: Dp = 88.dp
 
     /** 底栏上方的滚动边缘渐变高度 */
     val ScrollEdgeHeight: Dp = 152.dp
+}
+
+/**
+ * 「打开设置」的注入点。
+ *
+ * 顶部导航栏删除后，「设置」不再有固定的可见入口。
+ * 页面末尾由 [MagicPageContent] 自动追加一个入口，底栏图标长按也能打开 ——
+ * 两条路径，保证可发现性。
+ */
+val LocalOpenSettings = staticCompositionLocalOf<() -> Unit> {
+    error("MagicScaffold 未提供 onOpenSettings")
 }
 
 /**
@@ -68,15 +80,18 @@ object MagicScaffoldDefaults {
  * - 顶部安全区（`WindowInsets.statusBars`）
  * - 底部安全区（`WindowInsets.navigationBars`，在 [MagicPageContent] 里叠加）
  * - 键盘（`WindowInsets.ime`：视口收缩 + 自动隐藏底栏）
- * - 大标题 → inline title 的**连续**折叠（不是阈值开关）
- * - 底栏上方的滚动边缘渐隐
+ * - 顶部 / 底部的滚动边缘渐隐
  * - 每个 Tab 各自记住滚动位置（iOS 行为，不是每次切回顶部）
+ *
+ * ⚠️ **本外壳没有顶部导航栏。** 这是刻意的：
+ * 顶部只保留一层无文字、无按钮的纯渐变遮罩。
+ * 页面身份由页面内的 [MagicPageHeader] 大标题承担；
+ * 设置入口由 [MagicPageContent] 末尾的条目 + 底栏长按承担。
  *
  * 页面内容请用 [MagicPageContent] 承载，它已内置一致的 insets 与内边距。
  */
 @Composable
 fun MagicScaffold(
-    title: String,
     tabs: List<LiquidTab>,
     selectedTab: Int,
     onSelectTab: (Int) -> Unit,
@@ -90,138 +105,72 @@ fun MagicScaffold(
     val density = LocalDensity.current
 
     // 每个 Tab 一个 ScrollState —— 切回来时停在上次的位置。
-    // 早期实现是 LaunchedEffect(selectedTab) { scrollTo(0) }：既是瞬移无动画，
-    // 又和 iOS 行为相反（iOS 的 Tab 会记住各自的滚动位置）。
     val scrollStates = remember(tabs.size) { List(tabs.size) { ScrollState(0) } }
     val safeIndex = selectedTab.coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
     val scrollState = scrollStates.getOrElse(safeIndex) { ScrollState(0) }
 
     // 键盘弹出时底栏让位：否则底栏会悬在键盘上面，或与键盘重叠
-    val imeBottom = WindowInsets.ime.getBottom(density)
-    val imeVisible = imeBottom > 0
+    val imeVisible = WindowInsets.ime.getBottom(density) > 0
 
-    MagicBackdrop(
-        modifier = modifier,
-        glassMode = glassMode,
-        content = { content(scrollState) },
-        overlay = {
-            MagicNavBar(
-                title = title,
-                scrollOffset = { scrollState.value },
-                onOpenSettings = onOpenSettings,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
-
-            // ── 滚动边缘效果 ──
-            // 内容靠近底栏时渐进淡出，而不是以全对比度从底栏下方穿出来。
-            // 底栏随后绘制，因此这层只会影响底栏周围与下方的内容。
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .height(MagicScaffoldDefaults.ScrollEdgeHeight)
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(
-                                Color.Transparent,
-                                colors.backdropBase.copy(alpha = 0.94f),
+    CompositionLocalProvider(LocalOpenSettings provides onOpenSettings) {
+        MagicBackdrop(
+            modifier = modifier,
+            glassMode = glassMode,
+            content = { content(scrollState) },
+            overlay = {
+                // ── 顶部渐隐遮罩 ──
+                // 纯渐变，**不放任何文字与按钮**。
+                // 作用是让滚到顶部的内容淡出，而不是以全对比度硬切在状态栏下方。
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .height(MagicScaffoldDefaults.TopScrimHeight)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    colors.backdropBase.copy(alpha = 0.94f),
+                                    Color.Transparent,
+                                )
                             )
                         )
-                    )
-            )
+                )
 
-            if (!imeVisible) {
-                LiquidBottomTabs(
-                    tabs = tabs,
-                    selectedIndex = selectedTab,
-                    onSelect = onSelectTab,
+                // ── 滚动边缘效果（底部）──
+                Box(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
-                        .windowInsetsPadding(WindowInsets.navigationBars)
-                        .padding(
-                            horizontal = MagicSpacing.screenMargin,
-                            vertical = MagicScaffoldDefaults.TabBarMargin,
-                        ),
+                        .fillMaxWidth()
+                        .height(MagicScaffoldDefaults.ScrollEdgeHeight)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    colors.backdropBase.copy(alpha = 0.94f),
+                                )
+                            )
+                        )
                 )
-            }
 
-            floatingOverlay()
-        },
-    )
-}
+                if (!imeVisible) {
+                    LiquidBottomTabs(
+                        tabs = tabs,
+                        selectedIndex = selectedTab,
+                        onSelect = onSelectTab,
+                        onOpenSettings = onOpenSettings,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .windowInsetsPadding(WindowInsets.navigationBars)
+                            .padding(
+                                horizontal = MagicSpacing.screenMargin,
+                                vertical = MagicScaffoldDefaults.TabBarMargin,
+                            ),
+                    )
+                }
 
-/**
- * 折叠式顶部导航栏。
- *
- * iOS 的 inline 导航栏是**整宽**的：材质从屏幕顶端一直铺到标题下方，
- * 底部收一条发丝线。早期实现做成左右各内缩 16dp 的悬浮圆角条（`largeCard`），
- * 那是「浮动工具条」，不是导航栏。
- *
- * 折叠是**连续**的：由滚动偏移直接驱动 alpha 与位移，
- * 而不是 `scroll > 96px` 这样的布尔开关（那会在阈值处生硬地闪一下）。
- * 状态读取放在 `graphicsLayer` 的 lambda 里，因此滚动时不会触发重组，只重绘。
- */
-@Composable
-fun MagicNavBar(
-    title: String,
-    scrollOffset: () -> Int,
-    onOpenSettings: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val colors = LocalMagicColors.current
-    val density = LocalDensity.current
-    val thresholdPx = with(density) { MagicScaffoldDefaults.HeaderHeight.toPx() }
-
-    MagicGlassSurface(
-        modifier = modifier
-            .fillMaxWidth()
-            .graphicsLayer {
-                val fraction = (scrollOffset() / thresholdPx).coerceIn(0f, 1f)
-                alpha = fraction
-                translationY = (1f - fraction) * -size.height
+                floatingOverlay()
             },
-        shape = RectangleShape,
-        level = GlassLevel.Thick,
-        // 覆盖层 → 使用内容折射源，真实折射身后的页面内容
-        backdrop = LocalContentBackdrop.current,
-        // 覆盖层不投影：iOS 靠材质 + 发丝线分层，投影会让它读成「浮起来的塑料条」
-        shadow = false,
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            androidx.compose.foundation.layout.Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    // 玻璃铺到屏幕顶端，内容避开状态栏
-                    .windowInsetsPadding(WindowInsets.statusBars)
-                    .padding(
-                        horizontal = MagicSpacing.cardPadding,
-                        vertical = MagicSpacing.row,
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = title,
-                    fontSize = MagicType.headline.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.primaryText,
-                    modifier = Modifier.weight(1f),
-                )
-                Text(
-                    text = "设置",
-                    fontSize = MagicType.footnote.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = colors.accent,
-                    modifier = Modifier.clickable(onClick = onOpenSettings),
-                )
-            }
-            // 底部发丝线 —— inline 导航栏的收口
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(0.5.dp)
-                    .background(colors.divider)
-            )
-        }
+        )
     }
 }
 
@@ -235,22 +184,24 @@ fun MagicNavBar(
  * - 键盘（`ime`）：视口收缩，且键盘弹起时不再为底栏预留空间
  * - 屏幕边距 16dp
  * - 底部 [MagicScaffoldDefaults.ContentBottomPadding]
+ * - 末尾自动追加一个**设置入口**（顶部导航栏删除后，这是「设置」的主发现路径）
  */
 @Composable
 fun MagicPageContent(
     scrollState: ScrollState,
     modifier: Modifier = Modifier,
     horizontalPadding: Dp = MagicSpacing.screenMargin,
-    topPadding: Dp = MagicSpacing.section,
+    topPadding: Dp = MagicSpacing.sectionLarge,
     bottomPadding: Dp = MagicScaffoldDefaults.ContentBottomPadding,
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(MagicSpacing.cardGap),
+    showSettingsEntry: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val density = LocalDensity.current
     val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
 
-    // 键盘弹起时底栏已隐藏，不再需要为它留出 88dp
+    // 键盘弹起时底栏已隐藏，不再需要为它留出空间
     val effectiveBottom = if (imeVisible) {
         MagicSpacing.screenMargin
     } else {
@@ -267,6 +218,45 @@ fun MagicPageContent(
             .padding(horizontal = horizontalPadding)
             .padding(top = topPadding, bottom = effectiveBottom),
         verticalArrangement = verticalArrangement,
-        content = content,
-    )
+    ) {
+        content()
+        if (showSettingsEntry) {
+            SettingsEntry()
+        }
+    }
+}
+
+/**
+ * 页面末尾的设置入口。
+ *
+ * 顶部导航栏删除后，「设置」需要新的可发现路径。
+ * 底栏长按是快捷方式（发现性差），这里才是主路径。
+ */
+@Composable
+private fun SettingsEntry() {
+    val colors = LocalMagicColors.current
+    val shapes = LocalMagicShapes.current
+    val openSettings = LocalOpenSettings.current
+
+    MagicGlassSurface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = shapes.card,
+        level = GlassLevel.Thin,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = openSettings)
+                .padding(MagicSpacing.cardPadding),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = "设置",
+                fontSize = MagicType.body.sp,
+                color = colors.primaryText,
+                modifier = Modifier.weight(1f),
+            )
+            Text(text = "›", fontSize = 20.sp, color = colors.tertiaryText)
+        }
+    }
 }
