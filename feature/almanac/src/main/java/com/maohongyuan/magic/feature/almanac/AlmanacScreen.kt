@@ -1,5 +1,6 @@
 package com.maohongyuan.magic.feature.almanac
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -19,17 +21,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maohongyuan.magic.core.calendar.CalendarService
+import com.maohongyuan.magic.core.calendar.DayInfo
+import com.maohongyuan.magic.core.calendar.HourInfo
 import com.maohongyuan.magic.designsystem.glass.GlassCard
 import com.maohongyuan.magic.designsystem.glass.GlassLevel
 import com.maohongyuan.magic.designsystem.glass.MagicBadge
-import com.maohongyuan.magic.designsystem.glass.MagicCardBody
 import com.maohongyuan.magic.designsystem.glass.MagicCaption
 import com.maohongyuan.magic.designsystem.glass.MagicDivider
 import com.maohongyuan.magic.designsystem.glass.MagicInfoRow
-import com.maohongyuan.magic.designsystem.glass.MagicLabel
 import com.maohongyuan.magic.designsystem.glass.MagicPageContent
 import com.maohongyuan.magic.designsystem.glass.MagicPageHeader
-import com.maohongyuan.magic.designsystem.glass.MagicPlaceholderNote
 import com.maohongyuan.magic.designsystem.glass.MagicSectionTitle
 import com.maohongyuan.magic.designsystem.theme.LocalMagicColors
 import com.maohongyuan.magic.designsystem.theme.LocalMagicShapes
@@ -38,125 +40,193 @@ import com.maohongyuan.magic.designsystem.theme.MagicSpacing
 import com.maohongyuan.magic.designsystem.theme.MagicType
 
 /**
- * 黄历择日 + 每日运势。
+ * 今日黄历。
  *
- * ⚠️ UI 阶段：全部为静态示例数据，交互未接线。
+ * 数据来自 [CalendarService]（历法内核，离线计算，无网络依赖）。
  */
 @Composable
-fun AlmanacScreen(scrollState: androidx.compose.foundation.ScrollState) {
+fun AlmanacScreen(scrollState: ScrollState) {
     val colors = LocalMagicColors.current
+    val day: DayInfo = remember { CalendarService.today() }
+    val hours: List<HourInfo> = remember(day) {
+        CalendarService.hoursOf(day.solar.year, day.solar.month, day.solar.day)
+    }
 
     MagicPageContent(scrollState = scrollState) {
         MagicPageHeader(
             title = "今日黄历",
-            subtitle = "2026 年 10 月 16 日 · 农历九月初六",
+            subtitle = "${day.solar.ymd} · 农历${day.lunar.monthLabel}${day.lunar.dayLabel}",
         )
-
-        MagicPlaceholderNote("本页为界面预览，数据为静态示例，尚未接入历法计算")
 
         // ── 日课概要 ──
         GlassCard {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "初六",
+                        text = day.lunar.dayLabel,
                         fontSize = MagicType.display.sp,
                         fontWeight = FontWeight.Bold,
                         color = colors.primaryText,
                     )
                     Spacer(Modifier.height(MagicSpacing.xs))
                     Text(
-                        text = "丙午年 · 戊戌月 · 丁卯日",
+                        text = "${day.lunar.yearGanZhi}年 · " +
+                            "${day.ganZhi.month?.stem?.label ?: ""}${day.ganZhi.month?.branch?.label ?: ""}月 · " +
+                            "${day.ganZhi.day?.stem?.label ?: ""}${day.ganZhi.day?.branch?.label ?: ""}日",
                         fontSize = MagicType.subheadline.sp,
                         color = colors.secondaryText,
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    MagicBadge("星期五", colors.accent)
+                    MagicBadge(day.solar.weekLabel, colors.accent)
                     Spacer(Modifier.height(MagicSpacing.row))
                     Text(
-                        text = "马年",
+                        text = "${day.lunar.zodiac}年",
                         fontSize = MagicType.footnote.sp,
                         color = colors.tertiaryText,
                     )
                 }
             }
 
+            if (day.jieQi != null) {
+                Spacer(Modifier.height(MagicSpacing.md))
+                MagicBadge("节气 · ${day.jieQi}", colors.auspicious)
+            }
+            if (day.festivals.isNotEmpty()) {
+                Spacer(Modifier.height(MagicSpacing.row))
+                Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.xs)) {
+                    day.festivals.forEach { MagicBadge(it, colors.warning) }
+                }
+            }
+
             MagicDivider()
 
-            MagicCardBody(spacing = 0.dp) {
-                MagicInfoRow("纳音", "天河水")
-                MagicInfoRow("星宿", "东方青龙 · 亢金龙（凶）")
-                MagicInfoRow("建除", "危日")
-                MagicInfoRow("黄道", "玉堂（黄道吉日）")
+            Column {
+                MagicInfoRow("年柱", "${day.ganZhi.year} · ${day.ganZhi.yearNaYin}")
+                MagicInfoRow("月柱", "${day.ganZhi.month} · ${day.ganZhi.monthNaYin}")
+                MagicInfoRow("日柱", "${day.ganZhi.day} · ${day.ganZhi.dayNaYin}")
+                MagicInfoRow("时柱", "${day.ganZhi.hour} · ${day.ganZhi.timeNaYin}")
+                MagicInfoRow("建除", "${day.almanac.zhiXing}日")
+                MagicInfoRow("黄道", "${day.almanac.tianShen}（${day.almanac.tianShenType}）")
+                MagicInfoRow("星宿", "${day.almanac.xiu}宿 · ${day.almanac.xiuLuck}")
             }
         }
 
         // ── 宜 ──
         GlassCard(level = GlassLevel.Thin) {
             MagicSectionTitle("宜")
-            MagicCardBody {
-                MarkedList(
-                    mark = MagicSemanticMark.AUSPICIOUS,
-                    color = colors.auspicious,
-                    items = listOf("祭祀", "出行", "签约", "纳财", "安床", "求医"),
-                )
-            }
+            Spacer(Modifier.height(MagicSpacing.md))
+            MarkedList(
+                mark = MagicSemanticMark.AUSPICIOUS,
+                color = colors.auspicious,
+                items = day.almanac.yi,
+            )
         }
 
         // ── 忌 ──
         GlassCard(level = GlassLevel.Thin) {
             MagicSectionTitle("忌")
-            MagicCardBody {
-                MarkedList(
-                    mark = MagicSemanticMark.INAUSPICIOUS,
-                    color = colors.inauspicious,
-                    items = listOf("动土", "嫁娶", "开市", "入宅"),
-                )
-            }
+            Spacer(Modifier.height(MagicSpacing.md))
+            MarkedList(
+                mark = MagicSemanticMark.INAUSPICIOUS,
+                color = colors.inauspicious,
+                items = day.almanac.ji,
+            )
         }
 
         // ── 冲煞与吉神方位 ──
         GlassCard(level = GlassLevel.Thin) {
             MagicSectionTitle("冲煞 · 吉神方位")
-            MagicCardBody(spacing = 0.dp) {
+            Spacer(Modifier.height(MagicSpacing.md))
+            Column {
                 MagicInfoRow(
                     label = "冲煞",
-                    value = "冲兔（丁卯）煞东",
+                    value = "${day.almanac.clashDescription}煞${day.almanac.sha}",
                     valueColor = colors.warning,
                 )
-                MagicInfoRow("喜神", "巽 · 东南")
-                MagicInfoRow("福神", "兑 · 正西")
-                MagicInfoRow("财神", "离 · 正南")
-                MagicInfoRow("阳贵神", "巽 · 东南")
-                MagicInfoRow("阴贵神", "震 · 正东")
-                MagicInfoRow("胎神", "仓库门外正南")
+                day.almanac.positions.forEach { p ->
+                    MagicInfoRow(p.name, "${p.direction} · ${p.description}")
+                }
             }
         }
 
         // ── 时辰吉凶 ──
         GlassCard(level = GlassLevel.Thin) {
             MagicSectionTitle("时辰吉凶")
-            Spacer(Modifier.height(MagicSpacing.xs))
-            HourGrid()
-            Spacer(Modifier.height(MagicSpacing.sm))
-            MagicCaption("吉时：子、寅、卯、午、申、酉。凶时宜静不宜动。")
+            Spacer(Modifier.height(MagicSpacing.md))
+            HourGrid(hours)
+            Spacer(Modifier.height(MagicSpacing.md))
+            MagicCaption(
+                "吉时：" + hours.filter { it.auspicious }
+                    .joinToString("、") { it.branch.label } + "。" +
+                    "凶时宜静不宜动。"
+            )
+        }
+
+        // ── 吉神 / 凶煞 ──
+        if (day.almanac.jiShen.isNotEmpty() || day.almanac.xiongSha.isNotEmpty()) {
+            GlassCard(level = GlassLevel.Thin) {
+                MagicSectionTitle("神煞")
+                Spacer(Modifier.height(MagicSpacing.md))
+                if (day.almanac.jiShen.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(
+                            text = MagicSemanticMark.AUSPICIOUS.glyph,
+                            fontSize = MagicType.subheadline.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.auspicious,
+                            modifier = Modifier.width(24.dp),
+                        )
+                        Text(
+                            text = day.almanac.jiShen.joinToString("、"),
+                            fontSize = MagicType.footnote.sp,
+                            color = colors.secondaryText,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                    Spacer(Modifier.height(MagicSpacing.row))
+                }
+                if (day.almanac.xiongSha.isNotEmpty()) {
+                    Row(verticalAlignment = Alignment.Top) {
+                        Text(
+                            text = MagicSemanticMark.INAUSPICIOUS.glyph,
+                            fontSize = MagicType.subheadline.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = colors.inauspicious,
+                            modifier = Modifier.width(24.dp),
+                        )
+                        Text(
+                            text = day.almanac.xiongSha.joinToString("、"),
+                            fontSize = MagicType.footnote.sp,
+                            color = colors.secondaryText,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+            }
         }
 
         // ── 彭祖百忌 ──
-        GlassCard(level = GlassLevel.Thin) {
-            MagicSectionTitle("彭祖百忌")
-            MagicCardBody {
-                Text(
-                    text = "丁不剃头 头必生疮",
-                    fontSize = MagicType.subheadline.sp,
-                    color = colors.secondaryText,
-                )
-                Text(
-                    text = "卯不穿井 水泉不香",
-                    fontSize = MagicType.subheadline.sp,
-                    color = colors.secondaryText,
-                )
+        if (day.almanac.pengZuGan.isNotBlank() || day.almanac.pengZuZhi.isNotBlank()) {
+            GlassCard(level = GlassLevel.Thin) {
+                MagicSectionTitle("彭祖百忌")
+                Spacer(Modifier.height(MagicSpacing.md))
+                Column(verticalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
+                    if (day.almanac.pengZuGan.isNotBlank()) {
+                        Text(
+                            text = day.almanac.pengZuGan,
+                            fontSize = MagicType.subheadline.sp,
+                            color = colors.secondaryText,
+                        )
+                    }
+                    if (day.almanac.pengZuZhi.isNotBlank()) {
+                        Text(
+                            text = day.almanac.pengZuZhi,
+                            fontSize = MagicType.subheadline.sp,
+                            color = colors.secondaryText,
+                        )
+                    }
+                }
             }
         }
 
@@ -190,7 +260,7 @@ private fun MarkedList(
             modifier = Modifier.width(24.dp),
         )
         Text(
-            text = items.joinToString("、"),
+            text = if (items.isEmpty()) "诸事不宜" else items.joinToString("、"),
             fontSize = MagicType.subheadline.sp,
             fontWeight = FontWeight.Medium,
             color = colors.primaryText,
@@ -201,31 +271,15 @@ private fun MarkedList(
 
 /** 十二时辰吉凶网格 */
 @Composable
-private fun HourGrid() {
+private fun HourGrid(hours: List<HourInfo>) {
     val colors = LocalMagicColors.current
     val shapes = LocalMagicShapes.current
-
-    // 支, 时段, 吉凶
-    val hours = listOf(
-        Triple("子", "23–01", true),
-        Triple("丑", "01–03", false),
-        Triple("寅", "03–05", true),
-        Triple("卯", "05–07", true),
-        Triple("辰", "07–09", false),
-        Triple("巳", "09–11", false),
-        Triple("午", "11–13", true),
-        Triple("未", "13–15", false),
-        Triple("申", "15–17", true),
-        Triple("酉", "17–19", true),
-        Triple("戌", "19–21", false),
-        Triple("亥", "21–23", false),
-    )
 
     Column(verticalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
         hours.chunked(4).forEach { row ->
             Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
-                row.forEach { (branch, range, auspicious) ->
-                    val tint = if (auspicious) colors.auspicious else colors.inauspicious
+                row.forEach { hour ->
+                    val tint = if (hour.auspicious) colors.auspicious else colors.inauspicious
                     Column(
                         modifier = Modifier
                             .weight(1f)
@@ -234,21 +288,27 @@ private fun HourGrid() {
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         Text(
-                            text = branch,
+                            text = hour.branch.label,
                             fontSize = MagicType.body.sp,
                             fontWeight = FontWeight.SemiBold,
                             color = colors.primaryText,
                         )
                         Text(
-                            text = range,
+                            text = hour.rangeLabel,
                             fontSize = MagicType.caption.sp,
                             color = colors.tertiaryText,
                         )
                         Text(
-                            text = if (auspicious) "吉" else "凶",
+                            text = if (hour.auspicious) "吉" else "凶",
                             fontSize = MagicType.caption.sp,
                             fontWeight = FontWeight.Bold,
                             color = tint,
+                            textAlign = TextAlign.Center,
+                        )
+                        Text(
+                            text = hour.tianShen,
+                            fontSize = MagicType.caption.sp,
+                            color = colors.tertiaryText,
                             textAlign = TextAlign.Center,
                         )
                     }

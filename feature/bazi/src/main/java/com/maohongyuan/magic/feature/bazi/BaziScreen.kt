@@ -1,6 +1,8 @@
 package com.maohongyuan.magic.feature.bazi
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -12,215 +14,253 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maohongyuan.magic.core.calendar.BaZiChart
+import com.maohongyuan.magic.core.calendar.BaZiService
+import com.maohongyuan.magic.core.calendar.Gender
+import com.maohongyuan.magic.core.interpret.BaZiRuleEngine
+import com.maohongyuan.magic.core.interpret.Interpretation
+import com.maohongyuan.magic.core.interpret.InterpretationRequest
+import com.maohongyuan.magic.core.interpret.Tone
+import com.maohongyuan.magic.core.interpret.Verdict
+import com.maohongyuan.magic.core.model.WuXing
 import com.maohongyuan.magic.designsystem.glass.GlassCard
 import com.maohongyuan.magic.designsystem.glass.GlassLevel
 import com.maohongyuan.magic.designsystem.glass.MagicBadge
 import com.maohongyuan.magic.designsystem.glass.MagicCaption
+import com.maohongyuan.magic.designsystem.glass.MagicCell
 import com.maohongyuan.magic.designsystem.glass.MagicDivider
 import com.maohongyuan.magic.designsystem.glass.MagicHeaderCell
-import com.maohongyuan.magic.designsystem.glass.MagicCell
-import com.maohongyuan.magic.designsystem.glass.MagicLabel
+import com.maohongyuan.magic.designsystem.glass.MagicInfoRow
 import com.maohongyuan.magic.designsystem.glass.MagicMetricBar
 import com.maohongyuan.magic.designsystem.glass.MagicPageContent
 import com.maohongyuan.magic.designsystem.glass.MagicPageHeader
-import com.maohongyuan.magic.designsystem.glass.MagicPlaceholderNote
 import com.maohongyuan.magic.designsystem.glass.MagicSectionTitle
+import com.maohongyuan.magic.designsystem.glass.MagicSegmentedControl
 import com.maohongyuan.magic.designsystem.glass.MagicSolidButton
 import com.maohongyuan.magic.designsystem.theme.LocalMagicColors
 import com.maohongyuan.magic.designsystem.theme.LocalMagicShapes
 import com.maohongyuan.magic.designsystem.theme.LocalMagicWuXing
+import com.maohongyuan.magic.designsystem.theme.MagicSemanticMark
 import com.maohongyuan.magic.designsystem.theme.MagicSpacing
 import com.maohongyuan.magic.designsystem.theme.MagicType
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.launch
 
 /**
- * 八字排盘。
+ * 八字命盘。
  *
- * ⚠️ UI 阶段：全部为静态示例数据，交互未接线。
+ * 数据来自 [BaZiService]（lunar 库封装，离线计算）。
  */
 @Composable
-fun BaziScreen(scrollState: androidx.compose.foundation.ScrollState) {
+fun BaziScreen(scrollState: ScrollState) {
     val colors = LocalMagicColors.current
     val shapes = LocalMagicShapes.current
+    val wuXing = LocalMagicWuXing.current
+    val scope = rememberCoroutineScope()
+
+    var year by remember { mutableStateOf("1990") }
+    var month by remember { mutableStateOf("6") }
+    var day by remember { mutableStateOf("15") }
+    var hour by remember { mutableStateOf("12") }
+    var gender by remember { mutableStateOf(Gender.MALE) }
+    var chart by remember { mutableStateOf<BaZiChart?>(null) }
+    var interpretation by remember { mutableStateOf<Interpretation?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+
+    fun cast() {
+        val y = year.toIntOrNull()
+        val m = month.toIntOrNull()
+        val d = day.toIntOrNull()
+        val h = hour.toIntOrNull()
+        if (y == null || m == null || d == null || h == null ||
+            m !in 1..12 || d !in 1..31 || h !in 0..23 || y !in 1900..2100
+        ) {
+            error = "请检查生辰：年 1900–2100，月 1–12，日 1–31，时 0–23"
+            chart = null
+            interpretation = null
+            return
+        }
+        error = null
+        val c = runCatching { BaZiService.chart(y, m, d, h, gender = gender) }.getOrNull()
+        chart = c
+        interpretation = null
+        if (c != null) {
+            scope.launch {
+                interpretation = BaZiRuleEngine().interpret(
+                    InterpretationRequest("看命盘", bazi = c)
+                ).firstOrNull()
+            }
+        }
+    }
 
     MagicPageContent(scrollState = scrollState) {
-        MagicPageHeader(
-            title = "八字命盘",
-            subtitle = "四柱 · 十神 · 大运流年",
-        )
+        MagicPageHeader(title = "八字命盘", subtitle = "四柱 · 十神 · 大运流年")
 
-        MagicPlaceholderNote("本页为界面预览，数据为静态示例，尚未接入排盘计算")
-
-        // ── 生辰输入 ──
+        // ── 生辰 ──
         GlassCard {
             MagicSectionTitle("生辰")
-            Spacer(Modifier.height(MagicSpacing.row))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row),
-            ) {
-                FakeInput("1990-06-15", Modifier.weight(1.4f))
-                FakeInput("08:30", Modifier.weight(1f))
+            Spacer(Modifier.height(MagicSpacing.md))
+            Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
+                FieldBox("年", year, { year = it }, Modifier.weight(1.4f))
+                FieldBox("月", month, { month = it }, Modifier.weight(1f))
+                FieldBox("日", day, { day = it }, Modifier.weight(1f))
+                FieldBox("时", hour, { hour = it }, Modifier.weight(1f))
             }
-            Spacer(Modifier.height(MagicSpacing.row))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row),
-            ) {
-                FakeInput("男", Modifier.weight(1f))
-                FakeInput("北京", Modifier.weight(2.4f))
-            }
-            Spacer(Modifier.height(MagicSpacing.cardPadding))
-            MagicSolidButton(
-                onClick = {},
-                selected = true,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
+            Spacer(Modifier.height(MagicSpacing.md))
+            MagicSegmentedControl(
+                options = Gender.entries.map { it.label },
+                selectedIndex = Gender.entries.indexOf(gender),
+                onSelect = { gender = Gender.entries[it] },
+            )
+            if (error != null) {
+                Spacer(Modifier.height(MagicSpacing.md))
                 Text(
-                    text = "排盘",
-                    fontSize = MagicType.body.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = colors.accent,
+                    text = "${MagicSemanticMark.WARNING.glyph} $error",
+                    fontSize = MagicType.footnote.sp,
+                    color = colors.warning,
                 )
             }
+            Spacer(Modifier.height(MagicSpacing.cardPadding))
+            MagicSolidButton(onClick = ::cast, selected = true, modifier = Modifier.fillMaxWidth()) {
+                Text("排盘", fontSize = MagicType.body.sp, fontWeight = FontWeight.SemiBold, color = colors.accent)
+            }
+            Spacer(Modifier.height(MagicSpacing.md))
+            MagicCaption("时柱由出生时辰决定，请务必填对。性别影响大运顺逆。")
         }
 
-        // ── 四柱 ──
-        GlassCard(level = GlassLevel.Thin) {
-            MagicSectionTitle("四柱")
-            Spacer(Modifier.height(MagicSpacing.md))
+        chart?.let { c ->
+            // ── 四柱 ──
+            GlassCard(level = GlassLevel.Thin) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    MagicSectionTitle("四柱", modifier = Modifier.weight(1f))
+                    MagicBadge(c.eightCharLabel, colors.accent)
+                }
+                Spacer(Modifier.height(MagicSpacing.md))
 
-            Row(modifier = Modifier.fillMaxWidth()) {
-                MagicHeaderCell("", weight = 0.72f)
-                MagicHeaderCell("年柱", weight = 1f, alignment = TextAlign.Center)
-                MagicHeaderCell("月柱", weight = 1f, alignment = TextAlign.Center)
-                MagicHeaderCell("日柱", weight = 1f, alignment = TextAlign.Center)
-                MagicHeaderCell("时柱", weight = 1f, alignment = TextAlign.Center)
-            }
-            Spacer(Modifier.height(MagicSpacing.xs))
-            MagicDivider()
-            Spacer(Modifier.height(MagicSpacing.xs))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    MagicHeaderCell("", weight = 0.72f)
+                    c.pillars.forEach { MagicHeaderCell(it.label, weight = 1f, alignment = TextAlign.Center) }
+                }
+                Spacer(Modifier.height(MagicSpacing.xs))
+                MagicDivider()
+                Spacer(Modifier.height(MagicSpacing.xs))
 
-            PillarRow("天干", listOf("庚", "壬", "辛", "壬"), emphasized = true)
-            PillarRow("地支", listOf("午", "午", "酉", "辰"), emphasized = true)
-            PillarRow("藏干", listOf("丁己", "丁己", "辛", "戊乙癸"))
-            PillarRow("十神", listOf("劫财", "伤官", "日主", "伤官"))
-            PillarRow("纳音", listOf("路旁土", "杨柳木", "石榴木", "长流水"))
-            PillarRow("神煞", listOf("将星", "文昌", "禄神", "华盖"))
+                PillarRow("天干", c.pillars.map { it.gan.label }, emphasized = true)
+                PillarRow("地支", c.pillars.map { it.zhi.label }, emphasized = true)
+                PillarRow("藏干", c.pillars.map { p -> p.hideGan.joinToString("") { it.label } })
+                PillarRow("十神", c.pillars.map { it.shiShenGan })
+                PillarRow("纳音", c.pillars.map { it.naYin })
+                PillarRow("地势", c.pillars.map { it.diShi })
 
-            Spacer(Modifier.height(MagicSpacing.md))
-            MagicCaption("日主辛金，生于午月，火旺金弱。")
-        }
-
-        // ── 五行旺衰 ──
-        GlassCard(level = GlassLevel.Thin) {
-            MagicSectionTitle("五行旺衰")
-            Spacer(Modifier.height(MagicSpacing.md))
-
-            val wuXing = LocalMagicWuXing.current
-            Column(verticalArrangement = Arrangement.spacedBy(MagicSpacing.md)) {
-                MagicMetricBar("木", 0.12f, wuXing.wood)
-                MagicMetricBar("火", 0.34f, wuXing.fire)
-                MagicMetricBar("土", 0.18f, wuXing.earth)
-                MagicMetricBar("金", 0.24f, wuXing.metal)
-                MagicMetricBar("水", 0.12f, wuXing.water)
+                Spacer(Modifier.height(MagicSpacing.md))
+                MagicCaption("日柱为命主本身，已用强调色标出。")
             }
 
-            Spacer(Modifier.height(MagicSpacing.md))
-            MagicDivider()
-            Spacer(Modifier.height(MagicSpacing.md))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
-                MagicBadge("喜用 金 水", colors.accent)
-                MagicBadge("忌神 火 土", colors.warning)
-            }
-        }
-
-        // ── 十神统计 ──
-        GlassCard(level = GlassLevel.Thin) {
-            MagicSectionTitle("十神分布")
-            Spacer(Modifier.height(MagicSpacing.md))
-            Column(verticalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
-                TenGodRow("比肩", "劫财", 2)
-                TenGodRow("食神", "伤官", 3)
-                TenGodRow("偏财", "正财", 0)
-                TenGodRow("七杀", "正官", 1)
-                TenGodRow("偏印", "正印", 2)
-            }
-        }
-
-        // ── 大运 ──
-        GlassCard(level = GlassLevel.Thin) {
-            MagicSectionTitle("大运")
-            Spacer(Modifier.height(MagicSpacing.xs))
-            MagicCaption("6 岁起运 · 顺行")
-            Spacer(Modifier.height(MagicSpacing.md))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row),
-            ) {
-                listOf(
-                    Triple("6", "乙未", "正财"),
-                    Triple("16", "丙申", "七杀"),
-                    Triple("26", "丁酉", "正官"),
-                    Triple("36", "戊戌", "偏印"),
-                    Triple("46", "己亥", "正印"),
-                    Triple("56", "庚子", "比肩"),
-                ).forEachIndexed { index, (age, ganZhi, tenGod) ->
-                    val active = index == 2
-                    Column(
-                        modifier = Modifier
-                            .width(84.dp)
-                            .background(
-                                color = if (active) colors.accent.copy(alpha = 0.12f) else Color.Transparent,
-                                shape = shapes.controlInCard,
-                            )
-                            .padding(vertical = MagicSpacing.md),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            text = "${age}岁",
-                            fontSize = MagicType.caption.sp,
-                            color = colors.tertiaryText,
-                        )
-                        Text(
-                            text = ganZhi,
-                            fontSize = MagicType.body.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = if (active) colors.accent else colors.primaryText,
-                        )
-                        Text(
-                            text = tenGod,
-                            fontSize = MagicType.caption.sp,
-                            color = if (active) colors.accent else colors.tertiaryText,
+            // ── 五行旺衰 ──
+            GlassCard(level = GlassLevel.Thin) {
+                MagicSectionTitle("五行分布")
+                Spacer(Modifier.height(MagicSpacing.md))
+                Column(verticalArrangement = Arrangement.spacedBy(MagicSpacing.md)) {
+                    c.wuXingRanked.forEach { (wx, n) ->
+                        MagicMetricBar(
+                            label = wx.label,
+                            ratio = if (c.maxWuXingCount == 0) 0f else n.toFloat() / c.maxWuXingCount,
+                            color = when (wx) {
+                                WuXing.MU -> wuXing.wood
+                                WuXing.HUO -> wuXing.fire
+                                WuXing.TU -> wuXing.earth
+                                WuXing.JIN -> wuXing.metal
+                                WuXing.SHUI -> wuXing.water
+                            },
                         )
                     }
+                }
+                Spacer(Modifier.height(MagicSpacing.md))
+                MagicDivider()
+                Spacer(Modifier.height(MagicSpacing.md))
+                val missing = c.wuXingCount.filter { it.value == 0 }.keys
+                Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
+                    MagicBadge("日主 ${c.dayMaster.label}（${c.dayMaster.wuXing}）", colors.accent)
+                    if (missing.isNotEmpty()) {
+                        MagicBadge("缺 ${missing.joinToString("、") { it.label }}", colors.warning)
+                    }
+                }
+                Spacer(Modifier.height(MagicSpacing.md))
+                MagicCaption("统计口径为四柱 4 干 + 4 支，不含藏干。")
+            }
+
+            // ── 大运 ──
+            GlassCard(level = GlassLevel.Thin) {
+                MagicSectionTitle("大运")
+                Spacer(Modifier.height(MagicSpacing.xs))
+                MagicCaption("${if (c.forward) "顺行" else "逆行"} · ${c.startAge} 岁起运")
+                Spacer(Modifier.height(MagicSpacing.md))
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row),
+                ) {
+                    c.daYun.forEach { d ->
+                        Column(
+                            modifier = Modifier
+                                .width(84.dp)
+                                .background(
+                                    if (d.index == 1) colors.accent.copy(alpha = 0.12f) else Color.Transparent,
+                                    shapes.controlInCard,
+                                )
+                                .padding(vertical = MagicSpacing.md),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            Text("${d.startAge}岁", fontSize = MagicType.caption.sp, color = colors.tertiaryText)
+                            Text(
+                                text = d.ganZhi,
+                                fontSize = MagicType.body.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (d.index == 1) colors.accent else colors.primaryText,
+                            )
+                            Text("${d.startYear}", fontSize = MagicType.caption.sp, color = colors.tertiaryText)
+                            Text(
+                                text = "空${d.xunKong}",
+                                fontSize = MagicType.caption.sp,
+                                color = colors.tertiaryText,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // ── 宫位 ──
+            GlassCard(level = GlassLevel.Thin) {
+                MagicSectionTitle("胎元 · 命宫 · 身宫")
+                Spacer(Modifier.height(MagicSpacing.md))
+                Column {
+                    MagicInfoRow("胎元", "${c.taiYuan} · ${c.taiYuanNaYin}")
+                    MagicInfoRow("命宫", "${c.mingGong} · ${c.mingGongNaYin}")
+                    MagicInfoRow("身宫", "${c.shenGong} · ${c.shenGongNaYin}")
                 }
             }
         }
 
-        // ── 神煞 ──
-        GlassCard(level = GlassLevel.Thin) {
-            MagicSectionTitle("神煞")
-            Spacer(Modifier.height(MagicSpacing.md))
-            Column(verticalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
-                ShenShaRow("天乙贵人", "日柱", colors.auspicious)
-                ShenShaRow("文昌贵人", "月柱", colors.auspicious)
-                ShenShaRow("羊刃", "年柱", colors.warning)
-                ShenShaRow("孤辰", "时柱", colors.inauspicious)
-            }
-        }
+        interpretation?.let { InterpretationCard(it) }
 
         Text(
             text = "术数内容仅供传统文化研究与娱乐，不构成任何决策建议。",
@@ -231,40 +271,45 @@ fun BaziScreen(scrollState: androidx.compose.foundation.ScrollState) {
     }
 }
 
-/** 输入框外观占位（不可输入） */
 @Composable
-private fun FakeInput(hint: String, modifier: Modifier = Modifier) {
+private fun FieldBox(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     val colors = LocalMagicColors.current
     val shapes = LocalMagicShapes.current
-    Box(
-        modifier = modifier
-            .background(
-                color = if (colors.isLight) Color.White.copy(alpha = 0.72f)
-                else Color.Black.copy(alpha = 0.40f),
-                shape = shapes.controlInCard,
+    Column(modifier = modifier) {
+        Text(label, fontSize = MagicType.caption.sp, color = colors.tertiaryText)
+        Spacer(Modifier.height(MagicSpacing.xs))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    if (colors.isLight) Color.White.copy(alpha = 0.72f)
+                    else Color.Black.copy(alpha = 0.40f),
+                    shapes.controlInCard,
+                )
+                .padding(horizontal = MagicSpacing.md, vertical = MagicSpacing.md),
+        ) {
+            BasicTextField(
+                value = value,
+                onValueChange = { onValueChange(it.filter { c -> c.isDigit() }.take(4)) },
+                singleLine = true,
+                textStyle = TextStyle(fontSize = MagicType.subheadline.sp, color = colors.primaryText),
+                cursorBrush = SolidColor(colors.accent),
+                modifier = Modifier.fillMaxWidth(),
             )
-            .padding(horizontal = MagicSpacing.md, vertical = MagicSpacing.md),
-    ) {
-        Text(
-            text = hint,
-            fontSize = MagicType.subheadline.sp,
-            color = colors.secondaryText,
-        )
+        }
     }
 }
 
-/** 四柱表的一行 */
 @Composable
-private fun PillarRow(
-    label: String,
-    values: List<String>,
-    emphasized: Boolean = false,
-) {
+private fun PillarRow(label: String, values: List<String>, emphasized: Boolean = false) {
     val colors = LocalMagicColors.current
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = MagicSpacing.row),
+        modifier = Modifier.fillMaxWidth().padding(vertical = MagicSpacing.row),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         MagicCell(text = label, weight = 0.72f, color = colors.tertiaryText)
@@ -273,7 +318,7 @@ private fun PillarRow(
                 text = value,
                 weight = 1f,
                 emphasized = emphasized,
-                // 日柱是命主本身，用强调色标出
+                // 日柱（index 2）是命主本身，用强调色标出
                 color = if (index == 2 && emphasized) colors.accent else null,
                 alignment = TextAlign.Center,
             )
@@ -281,72 +326,60 @@ private fun PillarRow(
     }
 }
 
-/** 十神一行：一对（偏 / 正）+ 数量点阵 */
 @Composable
-private fun TenGodRow(left: String, right: String, count: Int) {
+private fun InterpretationCard(interpretation: Interpretation) {
     val colors = LocalMagicColors.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = left,
-            fontSize = MagicType.footnote.sp,
-            color = colors.secondaryText,
-            modifier = Modifier.width(56.dp),
-        )
-        Text(
-            text = right,
-            fontSize = MagicType.footnote.sp,
-            color = colors.secondaryText,
-            modifier = Modifier.width(56.dp),
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.xs)) {
-            repeat(count) {
-                Box(
-                    modifier = Modifier
-                        .width(20.dp)
-                        .height(6.dp)
-                        .background(colors.accent, LocalMagicShapes.current.pill),
-                )
+    val shapes = LocalMagicShapes.current
+
+    val verdictColor = when (interpretation.verdict) {
+        Verdict.AUSPICIOUS -> colors.auspicious
+        Verdict.INAUSPICIOUS -> colors.inauspicious
+        Verdict.NEUTRAL -> colors.secondaryText
+        Verdict.MIXED -> colors.warning
+    }
+
+    GlassCard {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            MagicSectionTitle("概述", modifier = Modifier.weight(1f))
+            MagicBadge(interpretation.tier.label, colors.accent)
+        }
+        Spacer(Modifier.height(MagicSpacing.md))
+        MagicDivider()
+        Spacer(Modifier.height(MagicSpacing.md))
+
+        Column(verticalArrangement = Arrangement.spacedBy(MagicSpacing.md)) {
+            interpretation.sections.forEach { section ->
+                Column {
+                    Text(
+                        text = section.title,
+                        fontSize = MagicType.footnote.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = when (section.tone) {
+                            Tone.POSITIVE -> colors.auspicious
+                            Tone.NEGATIVE -> colors.inauspicious
+                            Tone.WARNING -> colors.warning
+                            Tone.NEUTRAL -> colors.accent
+                        },
+                    )
+                    Spacer(Modifier.height(2.dp))
+                    Text(section.body, fontSize = MagicType.footnote.sp, color = colors.secondaryText)
+                }
             }
         }
-        if (count == 0) {
-            Text(
-                text = "—",
-                fontSize = MagicType.footnote.sp,
-                color = colors.tertiaryText,
-            )
-        }
-    }
-}
 
-/** 神煞一行 */
-@Composable
-private fun ShenShaRow(name: String, position: String, color: Color) {
-    val colors = LocalMagicColors.current
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+        Spacer(Modifier.height(MagicSpacing.cardPadding))
         Box(
             modifier = Modifier
-                .width(4.dp)
-                .height(16.dp)
-                .background(color, LocalMagicShapes.current.pill),
-        )
-        Spacer(Modifier.width(MagicSpacing.md))
-        Text(
-            text = name,
-            fontSize = MagicType.subheadline.sp,
-            fontWeight = FontWeight.Medium,
-            color = colors.primaryText,
-            modifier = Modifier.weight(1f),
-        )
-        Text(
-            text = position,
-            fontSize = MagicType.footnote.sp,
-            color = colors.tertiaryText,
-        )
+                .fillMaxWidth()
+                .background(verdictColor.copy(alpha = 0.10f), shapes.controlInCard)
+                .padding(MagicSpacing.md),
+        ) {
+            Text(
+                text = interpretation.headline,
+                fontSize = MagicType.subheadline.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = verdictColor,
+            )
+        }
     }
 }
