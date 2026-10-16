@@ -1,0 +1,39 @@
+# ── Gradle ──────────────────────────────────────────────
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# ── Android ─────────────────────────────────────────────
+local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+captures/
+.cxx/
+
+# ── IDE ─────────────────────────────────────────────────
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ── 签名密钥（绝不入库）─────────────────────────────────
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+
+# ── 大模型文件（绝不入库，由用户在 App 内按需下载）──────
+# 项目原则：仓库与 APK 均不包含任何模型权重。
+*.gguf
+*.litertlm
+*.tflite
+*.task
+*.onnx
+*.safetensors
+models/
+assets/models/

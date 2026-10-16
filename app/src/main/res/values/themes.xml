@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Compose 负责全部绘制，此 Android 主题仅决定窗口装饰：
+      启动时的窗口底色、是否带 ActionBar。
+      流体玻璃的背景层由 designsystem 的 MagicBackdrop 提供。
+
+      日/夜两套分别在 values/themes.xml 与 values-night/themes.xml 中定义。
+    -->
+    <style name="Theme.MaoXianHuanShu" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/magic_window_background</item>
+    </style>
+</resources>

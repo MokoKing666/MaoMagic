@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 暗色模式：窗口底色改为近黑，避免启动瞬间闪白 -->
+    <style name="Theme.MaoXianHuanShu" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/magic_window_background</item>
+    </style>
+</resources>

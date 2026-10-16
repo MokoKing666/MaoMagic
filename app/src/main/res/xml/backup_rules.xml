@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 云备份规则：历史记录与设置允许备份；API Key 等敏感数据排除 -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="magic_secure_keys.xml" />
+</full-backup-content>
