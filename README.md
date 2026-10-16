@@ -94,7 +94,7 @@
 
 ## 安装
 
-从 [Releases](../../releases) 下载最新 APK 直接安装。
+从 [Releases](https://github.com/MokoKing666/MaoMagic/releases/latest) 下载最新 APK 直接安装。
 
 **系统要求**：Android 13（API 33）及以上。
 
