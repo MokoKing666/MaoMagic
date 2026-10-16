@@ -1,6 +1,8 @@
 package com.maohongyuan.magic.designsystem.theme
 
-import androidx.compose.foundation.shape.CornerBasedShape
+import androidx.compose.ui.graphics.Shape
+import com.kyant.shapes.RoundedCornerStyle
+import com.kyant.shapes.RoundedRectangle
 import androidx.compose.foundation.shape.CornerSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Immutable
@@ -205,48 +207,59 @@ enum class MagicSemanticMark(val glyph: String, val label: String) {
 // 铁律一：同心圆角公式 `r_child = r_parent − padding`
 //         圆心必须重合，否则接缝处出现可见的厚度跳变。
 //
-// 铁律二：容器圆角一律用 [MagicSmoothCornerShape]（连续曲率），
-//         **不要**用 `RoundedCornerShape` —— 后者是正圆弧，
+// 铁律二：容器圆角一律用 `com.kyant.shapes.RoundedRectangle(radius, Continuous)`
+//         （G2 连续曲率），**不要**用 `RoundedCornerShape` —— 后者是正圆弧，
 //         与 iOS 26/27 的圆角不同族。胶囊类（tabBar / pill）例外，
 //         它们的端部本来就定义为半圆。
 //
-// 同时这也是 `lens()` 折射的硬性前提：必须是 CornerBasedShape。
+// ⚠️ 这里用 `Shape` 而非 `CornerBasedShape`：kyant Shapes 库的
+//    `RoundedRectangularShape` **不是** Compose 的 `CornerBasedShape`。
+//    `lens()` 折射需要知道最大圆角半径，[MagicGlassSurface] 已改为
+//    同时支持这两种形状（`CornerBasedShape` 走四角 CornerSize，
+//    `RoundedRectangularShape` 走它自己的 `corners()`），
+//    所以换成库的形状**不会**丢掉折射。
 // ─────────────────────────────────────────────────────────────
 @Immutable
 data class MagicShapes(
     /** 标准卡片：28dp。内边距 16dp ⇒ 内部控件 12dp */
-    val card: CornerBasedShape,
+    val card: Shape,
     /** 大卡片 / 弹窗：36dp。内边距 16dp ⇒ 内部控件 20dp */
-    val largeCard: CornerBasedShape,
+    val largeCard: Shape,
     /** 底部弹窗 */
-    val sheet: CornerBasedShape,
+    val sheet: Shape,
     /** 底部 Tab 栏外壳。胶囊，半径 = 高度 / 2（随高度自适应） */
-    val tabBar: CornerBasedShape,
+    val tabBar: Shape,
     /** 卡片内部控件（分段控件、输入框）：28 − 16 = 12 */
-    val controlInCard: CornerBasedShape,
+    val controlInCard: Shape,
     /**
      * 卡片内「分段控件滑块」：12 − 2 = 10。
      *
      * 分段控件外层有 2dp 内边距，内层必须减去这 2dp 才同心。
      * 早期实现内外层都用 12dp —— 圆心不重合，接缝处出现可见的厚度跳变。
      */
-    val controlInCardThumb: CornerBasedShape,
+    val controlInCardThumb: Shape,
     /** 大卡片内部控件：36 − 16 = 20 */
-    val controlInLargeCard: CornerBasedShape,
+    val controlInLargeCard: Shape,
     /** 胶囊（高度自适应，半径 = 高度 / 2） */
-    val pill: CornerBasedShape,
+    val pill: Shape,
 )
 
 val DefaultMagicShapes = MagicShapes(
-    card = MagicSmoothCornerShape(CornerSize(28.dp)),
-    largeCard = MagicSmoothCornerShape(CornerSize(36.dp)),
-    sheet = MagicSmoothCornerShape(CornerSize(36.dp)),
+    // 圆角矩形统一改用 kyant Shapes 库的 RoundedRectangle(Continuous)，
+    // 即文档 tutorials/smoother-rounded-corners 推荐的做法 —— G2 连续曲率，
+    // 比自研的三次贝塞尔逼近更准（见 MagicSmoothCornerShape 的说明）。
+    card = RoundedRectangle(28.dp, RoundedCornerStyle.Continuous),
+    largeCard = RoundedRectangle(36.dp, RoundedCornerStyle.Continuous),
+    sheet = RoundedRectangle(36.dp, RoundedCornerStyle.Continuous),
     // 真胶囊：不写死 32dp。写死会在系统字号放大 / 内边距变化后失效，
     // 32dp 不再等于 h/2，胶囊退化成圆角矩形，同心等式同时被破坏。
+    //
+    // 这里刻意**不**用 kyant 的 Continuous 胶囊：真胶囊的圆弧与直边本就相切（G1 连续），
+    // 不存在曲率突变问题，而 Continuous 变体会把两端收得更圆，反而偏离「胶囊」的定义。
     tabBar = RoundedCornerShape(percent = 50),
-    controlInCard = MagicSmoothCornerShape(CornerSize(12.dp)),
-    controlInCardThumb = MagicSmoothCornerShape(CornerSize(10.dp)),
-    controlInLargeCard = MagicSmoothCornerShape(CornerSize(20.dp)),
+    controlInCard = RoundedRectangle(12.dp, RoundedCornerStyle.Continuous),
+    controlInCardThumb = RoundedRectangle(10.dp, RoundedCornerStyle.Continuous),
+    controlInLargeCard = RoundedRectangle(20.dp, RoundedCornerStyle.Continuous),
     pill = RoundedCornerShape(percent = 50),
 )
 

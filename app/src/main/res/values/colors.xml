@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- 朱砂红 —— 与 designsystem 的「吉」色一致 -->
-    <color name="ic_launcher_background">#D92B2B</color>
+    <!-- 图标底色 —— 暖米白。比布偶猫的猫身浅一档：
+         纯白会在浅色壁纸上「消失」，再深又会与猫身糊在一起 -->
+    <color name="ic_launcher_background">#F7F1E8</color>
 
     <!-- 窗口底色 —— 与 MagicBackdrop 背景层基调一致，避免启动瞬间闪白/闪黑 -->
     <color name="magic_window_background">#F2F2F7</color>

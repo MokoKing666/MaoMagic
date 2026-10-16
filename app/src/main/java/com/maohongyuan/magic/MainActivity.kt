@@ -10,6 +10,17 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.maohongyuan.magic.core.data.DivinationRecordStore
+import com.maohongyuan.magic.core.data.GlassQuality
+import com.maohongyuan.magic.core.data.MagicSettings
+import com.maohongyuan.magic.core.data.SettingsStore
+import com.maohongyuan.magic.designsystem.glass.GlassTuning
+import com.maohongyuan.magic.designsystem.glass.LocalGlassTuning
+import kotlinx.coroutines.launch
 import com.maohongyuan.magic.designsystem.glass.GlassMode
 import com.maohongyuan.magic.designsystem.glass.LiquidTab
 import com.maohongyuan.magic.designsystem.glass.MagicScaffold
@@ -40,36 +51,72 @@ private val Tabs = listOf(
 
 @Composable
 private fun MagicApp() {
+    val context = LocalContext.current
+    val settingsStore = remember { SettingsStore(context) }
+    val recordStore = remember { DivinationRecordStore(context) }
+
+    // 设置：先给默认值，读到持久化值后自动替换 —— 避免启动时白屏或闪烁
+    var settings by remember { mutableStateOf(MagicSettings.DEFAULT) }
+    LaunchedEffect(Unit) {
+        settingsStore.settings.collect { settings = it }
+    }
+
+    var historyCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        recordStore.records.collect { historyCount = it.size }
+    }
+
     var tab by remember { mutableIntStateOf(0) }
-    var glassMode by remember { mutableStateOf(GlassMode.FULL) }
     var showSettings by remember { mutableStateOf(false) }
     var showLicenses by remember { mutableStateOf(false) }
 
-    MagicScaffold(
-        tabs = Tabs,
-        selectedTab = tab,
-        onSelectTab = { tab = it },
-        onOpenSettings = { showSettings = true },
-        glassMode = glassMode,
-        floatingOverlay = {
-            if (showSettings) {
-                SettingsSheet(
-                    glassMode = glassMode,
-                    onGlassModeChange = { glassMode = it },
-                    onOpenLicenses = { showLicenses = true },
-                    onDismiss = { showSettings = false },
-                )
+    val scope = rememberCoroutineScope()
+
+    // 设置里的档位 → 设计系统的 GlassMode
+    val glassMode = when (settings.glassQuality) {
+        GlassQuality.FULL -> GlassMode.FULL
+        GlassQuality.REDUCED -> GlassMode.REDUCED
+        GlassQuality.OFF -> GlassMode.OFF
+    }
+
+    // 把玻璃调校下发给整个设计系统
+    CompositionLocalProvider(
+        LocalGlassTuning provides GlassTuning(
+            refractionScale = settings.refractionScale,
+            surfaceAlphaScale = settings.surfaceAlphaScale,
+        )
+    ) {
+        MagicScaffold(
+            tabs = Tabs,
+            selectedTab = tab,
+            onSelectTab = { tab = it },
+            onOpenSettings = { showSettings = true },
+            glassMode = glassMode,
+            floatingOverlay = {
+                if (showSettings) {
+                    SettingsSheet(
+                        settings = settings,
+                        onChange = { next ->
+                            settings = next
+                            scope.launch { settingsStore.update { next } }
+                        },
+                        historyCount = historyCount,
+                        onClearHistory = { scope.launch { recordStore.clear() } },
+                        onOpenLicenses = { showLicenses = true },
+                        onDismiss = { showSettings = false },
+                    )
+                }
+                if (showLicenses) {
+                    LicenseScreen(onDismiss = { showLicenses = false })
+                }
+            },
+        ) { scrollState ->
+            when (tab) {
+                0 -> LiuyaoScreen(scrollState)
+                1 -> BaziScreen(scrollState)
+                2 -> MeihuaScreen(scrollState)
+                else -> AlmanacScreen(scrollState)
             }
-            if (showLicenses) {
-                LicenseScreen(onDismiss = { showLicenses = false })
-            }
-        },
-    ) { scrollState ->
-        when (tab) {
-            0 -> LiuyaoScreen(scrollState)
-            1 -> BaziScreen(scrollState)
-            2 -> MeihuaScreen(scrollState)
-            else -> AlmanacScreen(scrollState)
         }
     }
 }

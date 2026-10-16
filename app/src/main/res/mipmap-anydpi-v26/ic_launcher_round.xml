@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  自适应图标。
+
+  前景用各密度 PNG（由 tools/gen_icons.py 从原画生成），主体占画布 66%，
+  正好落在 72dp 安全区内 —— 比例再大耳朵会被圆形遮罩切掉。
+
+  背景取暖米白 #F7F1E8：比猫身浅一档，既不像纯白那样在浅色壁纸上「消失」，
+  又与布偶猫的暖色调协调。
+-->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@color/ic_launcher_background" />
+    <foreground android:drawable="@mipmap/ic_launcher_foreground" />
+    <monochrome android:drawable="@mipmap/ic_launcher_foreground" />
+</adaptive-icon>

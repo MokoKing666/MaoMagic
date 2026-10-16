@@ -30,6 +30,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalDensity
@@ -60,6 +61,9 @@ object MagicScaffoldDefaults {
     /** 顶部渐隐遮罩高度。内容滚过时淡出，而不是硬切在状态栏下。 */
     val TopScrimHeight: Dp = 88.dp
 
+    /** 右上角设置按钮的直径。44dp 是单手拇指可点的最小舒适尺寸 */
+    val SettingsButtonSize: Dp = 44.dp
+
     /** 底栏上方的滚动边缘渐变高度 */
     val ScrollEdgeHeight: Dp = 152.dp
 }
@@ -67,7 +71,7 @@ object MagicScaffoldDefaults {
 /**
  * 「打开设置」的注入点。
  *
- * 顶部导航栏删除后，「设置」不再有固定的可见入口。
+ * 设置入口是**右上角的玻璃圆钮**（见下方 overlay），全局固定、始终可见。
  * 页面末尾由 [MagicPageContent] 自动追加一个入口，底栏图标长按也能打开 ——
  * 两条路径，保证可发现性。
  */
@@ -88,7 +92,7 @@ val LocalOpenSettings = staticCompositionLocalOf<() -> Unit> {
  * ⚠️ **本外壳没有顶部导航栏。** 这是刻意的：
  * 顶部只保留一层无文字、无按钮的纯渐变遮罩。
  * 页面身份由页面内的 [MagicPageHeader] 大标题承担；
- * 设置入口由 [MagicPageContent] 末尾的条目 + 底栏长按承担。
+ * 另有底栏长按作为快捷方式（发现性差，只作补充）。
  *
  * 页面内容请用 [MagicPageContent] 承载，它已内置一致的 insets 与内边距。
  */
@@ -123,23 +127,59 @@ fun MagicScaffold(
             glassMode = glassMode,
             content = { content(scrollState) },
             overlay = {
-                // ── 顶部渐隐遮罩 ──
-                // 纯渐变，**不放任何文字与按钮**。
-                // 作用是让滚到顶部的内容淡出，而不是以全对比度硬切在状态栏下方。
+                // ── 顶部滚动边缘效果 ──
+                // iOS 26 的滚动边缘效果本质是**渐进模糊**（贴边最糊、向内递减），
+                // 而不是单纯压一层渐变 —— 后者只是「变暗」，不是「失焦」。
+                // 这里用 MagicProgressiveBlur，再叠一层很淡的 scrim 保证状态栏图标可读。
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopCenter)
                         .fillMaxWidth()
                         .height(MagicScaffoldDefaults.TopScrimHeight)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    colors.backdropBase.copy(alpha = 0.94f),
-                                    Color.Transparent,
-                                )
+                ) {
+                    MagicProgressiveBlur(
+                        height = MagicScaffoldDefaults.TopScrimHeight,
+                        maxBlur = 14.dp,
+                        edge = BlurEdge.TOP,
+                        backdrop = LocalContentBackdrop.current ?: LocalBackdrop.current,
+                        scrimColor = colors.backdropBase,
+                        scrimMaxAlpha = 0.58f,
+                    )
+                }
+
+                // ── 设置入口：右上角 ──
+                //
+                // 位置分析（原先的两个入口都不合格）：
+                //   · 页面末尾：长页面要滚到底才看得到，位置还随内容长度浮动，无法形成肌肉记忆
+                //   · 长按 Tab：**零可发现性**，没有任何视觉提示，用户根本不会试
+                //
+                // 右上角是 iOS 放 trailing 导航按钮的惯例位置：固定不动、始终可见、单手可达。
+                // 用一个玻璃圆钮而不是重开一条导航栏 —— 保持「顶部无栏」的既定设计。
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(end = MagicSpacing.screenMargin, top = MagicSpacing.xs),
+                ) {
+                    MagicGlassSurface(
+                        modifier = Modifier
+                            .size(MagicScaffoldDefaults.SettingsButtonSize)
+                            .clip(LocalMagicShapes.current.pill)
+                            .clickable(onClick = onOpenSettings),
+                        shape = LocalMagicShapes.current.pill,
+                        level = GlassLevel.Thin,
+                        shadow = false,
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            MagicTuneIcon(
+                                tint = colors.primaryText,
+                                modifier = Modifier.size(
+                                    MagicScaffoldDefaults.SettingsButtonSize * 0.44f
+                                ),
                             )
-                        )
-                )
+                        }
+                    }
+                }
 
                 // ── 滚动边缘效果（底部）──
                 Box(
@@ -184,7 +224,7 @@ fun MagicScaffold(
                         tabs.forEachIndexed { index, tab ->
                             LiquidBottomTab(
                                 onClick = { onSelectTab(index) },
-                                // 长按任一 Tab 打开设置（快捷方式；主入口是页面末尾的设置条目）
+                                // 长按任一 Tab 打开设置（快捷方式；主入口是右上角按钮）
                                 onLongClick = onOpenSettings,
                             ) {
                                 // ⚠️ 必须给中性色。选中态的蓝色由着色层折射产生，
@@ -221,7 +261,6 @@ fun MagicScaffold(
  * - 键盘（`ime`）：视口收缩，且键盘弹起时不再为底栏预留空间
  * - 屏幕边距 16dp
  * - 底部 [MagicScaffoldDefaults.ContentBottomPadding]
- * - 末尾自动追加一个**设置入口**（顶部导航栏删除后，这是「设置」的主发现路径）
  */
 @Composable
 fun MagicPageContent(
@@ -231,7 +270,6 @@ fun MagicPageContent(
     topPadding: Dp = MagicSpacing.sectionLarge,
     bottomPadding: Dp = MagicScaffoldDefaults.ContentBottomPadding,
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(MagicSpacing.cardGap),
-    showSettingsEntry: Boolean = true,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val density = LocalDensity.current
@@ -257,43 +295,6 @@ fun MagicPageContent(
         verticalArrangement = verticalArrangement,
     ) {
         content()
-        if (showSettingsEntry) {
-            SettingsEntry()
-        }
     }
 }
 
-/**
- * 页面末尾的设置入口。
- *
- * 顶部导航栏删除后，「设置」需要新的可发现路径。
- * 底栏长按是快捷方式（发现性差），这里才是主路径。
- */
-@Composable
-private fun SettingsEntry() {
-    val colors = LocalMagicColors.current
-    val shapes = LocalMagicShapes.current
-    val openSettings = LocalOpenSettings.current
-
-    MagicGlassSurface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = shapes.card,
-        level = GlassLevel.Thin,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClick = openSettings)
-                .padding(MagicSpacing.cardPadding),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = "设置",
-                fontSize = MagicType.body.sp,
-                color = colors.primaryText,
-                modifier = Modifier.weight(1f),
-            )
-            Text(text = "›", fontSize = 20.sp, color = colors.tertiaryText)
-        }
-    }
-}

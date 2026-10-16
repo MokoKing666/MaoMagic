@@ -33,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
@@ -40,14 +41,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
+import com.kyant.shapes.RoundedRectangularShape
 import com.kyant.backdrop.effects.blur
 import com.kyant.backdrop.effects.lens
 import com.kyant.backdrop.effects.vibrancy
@@ -99,10 +104,16 @@ fun MagicGlassSurface(
 ) {
     val colors = LocalMagicColors.current
     val mode = LocalGlassMode.current
+    val tuning = LocalGlassTuning.current
     val resolvedBackdrop = backdrop ?: LocalBackdrop.current
     val effective = level.degradeTo(mode)
 
-    val surfaceAlpha = if (colors.isLight) level.surfaceAlphaLight else level.surfaceAlphaDark
+    // 用户调校倍率作用在标定值上；夹到 [0,1] 防止越界。
+    // 表面不透明度是可读性底线，标定值本身不改，只在其附近微调。
+    val surfaceAlpha = (
+        (if (colors.isLight) level.surfaceAlphaLight else level.surfaceAlphaDark) *
+            tuning.surfaceAlphaScale
+        ).coerceIn(0f, 1f)
 
     // ⚠️ 表面色**一律用白**，深色主题下也绝不能用黑。
     //
@@ -130,8 +141,28 @@ fun MagicGlassSurface(
         return
     }
 
-    // lens 只支持 CornerBasedShape；非圆角形状静默跳过折射
-    val cornerShape = shape as? CornerBasedShape
+    // lens 需要知道最大圆角半径；取不到就静默跳过折射。
+    //
+    // 需要同时支持两种形状来源：
+    // - Compose 的 `CornerBasedShape`（四角是 CornerSize，需按 size+density 解析）
+    // - kyant Shapes 库的 `RoundedRectangularShape`（四角已是像素值，走它自己的 corners()）
+    //
+    // 早期实现只认 CornerBasedShape，所以换用形状库时折射会**静默消失** ——
+    // 玻璃还在、但不再折射，很难察觉。这里一并支持，换库不掉效果。
+    val layoutDirection = LocalLayoutDirection.current
+    val lensRadiusPx: ((Size, Density) -> Float)? = when (val s = shape) {
+        is CornerBasedShape -> { size, density ->
+            listOf(s.topStart, s.topEnd, s.bottomEnd, s.bottomStart)
+                .maxOf { it.toPx(size, density) }
+                .coerceAtMost(size.minDimension / 2f)
+        }
+        is RoundedRectangularShape -> { size, density ->
+            s.corners(size, layoutDirection, density).let {
+                maxOf(it.topLeft, it.topRight, it.bottomRight, it.bottomLeft)
+            }.coerceAtMost(size.minDimension / 2f)
+        }
+        else -> null
+    }
 
     Box(
         modifier = modifier.drawBackdrop(
@@ -143,21 +174,11 @@ fun MagicGlassSurface(
                     vibrancy()
                     blur(effective.blur.toPx())
                 }
-                if (cornerShape != null &&
+                if (lensRadiusPx != null &&
                     effective.lensHeight > 0.dp &&
                     effective.lensAmount > 0.dp
                 ) {
-                    // lens 的 height 必须落在 [0, 最大圆角半径] 内，否则圆角处会出现不连续。
-                    // Compose 未公开 minCornerRadius，故按库自身的方式从四角尺寸求得。
-                    val density = this
-                    val maxRadius = listOf(
-                        cornerShape.topStart,
-                        cornerShape.topEnd,
-                        cornerShape.bottomEnd,
-                        cornerShape.bottomStart,
-                    ).maxOf { it.toPx(size, density) }
-                        .coerceAtMost(size.minDimension / 2f)
-
+                    val maxRadius = lensRadiusPx.invoke(size, this)
                     val height = effective.lensHeight.toPx().coerceAtMost(maxRadius)
 
                     // ⚠️ 折射量必须夹到**元素短边的 1/4**，不能只夹到 minDimension。
@@ -178,7 +199,10 @@ fun MagicGlassSurface(
                     //
                     // 实测（深色，底栏中心）：夹之前 rgb(82,91,94) R−B=−12（冷），
                     // 夹到 1/4 之后 rgb(72,72,64) R−B=+8（暖），与完全关掉 lens 的结果一致。
-                    val amount = effective.lensAmount.toPx().coerceAtMost(size.minDimension * 0.25f)
+                    // 1/4 短边的夹取是硬约束，必须在乘倍率**之后**再夹一次，
+                    // 否则调高倍率会突破上限、重新引入「整片发灰蓝」。
+                    val amount = (effective.lensAmount.toPx() * tuning.refractionScale)
+                        .coerceAtMost(size.minDimension * 0.25f)
                     if (height > 0f && amount > 0f) {
                         lens(
                             refractionHeight = height,
@@ -210,7 +234,7 @@ fun MagicGlassSurface(
 
                 // 2. 内描边由 Modifier.border 负责（见下方 modifier 链），此处只画顶边高光。
                 // 3. 顶边高光 1dp —— 模拟受光面，跟随圆角内缩
-                val inset = (cornerShape?.topStart?.toPx(size, this) ?: 0f)
+                val inset = (lensRadiusPx?.invoke(size, this) ?: 0f)
                     .coerceAtMost(size.width / 2f)
                 if (size.width > inset * 2f) {
                     drawLine(
@@ -348,8 +372,8 @@ fun MagicSegmentedControl(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    shape: CornerBasedShape = LocalMagicShapes.current.controlInCard,
-    thumbShape: CornerBasedShape = LocalMagicShapes.current.controlInCardThumb,
+    shape: Shape = LocalMagicShapes.current.controlInCard,
+    thumbShape: Shape = LocalMagicShapes.current.controlInCardThumb,
 ) {
     val colors = LocalMagicColors.current
     val density = LocalDensity.current

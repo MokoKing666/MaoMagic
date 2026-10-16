@@ -1,3 +1,5 @@
+import java.util.Properties
+
 // :app — 猫仙幻术 应用外壳
 // AGP 9 起内建 Kotlin 支持，无需再应用 org.jetbrains.kotlin.android
 plugins {
@@ -15,7 +17,29 @@ android {
         minSdk = 33
         targetSdk = 37
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "1.0.0"
+    }
+
+    /**
+     * 发布签名。
+     *
+     * 密钥库与口令通过 `keystore.properties`（**已 gitignore**）读取，
+     * 文件不存在时静默跳过 —— 这样 CI 或他人克隆后仍能构建 debug，
+     * 只是产出未签名的 release，不会因缺密钥而整个构建失败。
+     */
+    signingConfigs {
+        create("release") {
+            val propsFile = rootProject.file("keystore.properties")
+            if (propsFile.exists()) {
+                val props = Properties().apply {
+                    propsFile.inputStream().use { load(it) }
+                }
+                storeFile = rootProject.file(props.getProperty("storeFile"))
+                storePassword = props.getProperty("storePassword")
+                keyAlias = props.getProperty("keyAlias")
+                keyPassword = props.getProperty("keyPassword")
+            }
+        }
     }
 
     buildTypes {
@@ -24,12 +48,18 @@ android {
         }
         release {
             isMinifyEnabled = false
+            // 有密钥库时用正式签名，否则产出未签名包（不会中断构建）
+            val releaseSigning = signingConfigs.findByName("release")
+            if (releaseSigning?.storeFile != null) {
+                signingConfig = releaseSigning
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
         }
     }
+
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -38,6 +68,8 @@ android {
 
     buildFeatures {
         compose = true
+        // 设置页要显示版本号。AGP 9 默认不生成 BuildConfig，需显式开启。
+        buildConfig = true
     }
 
     packaging {
