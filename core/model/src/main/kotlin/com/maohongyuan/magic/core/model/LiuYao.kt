@@ -21,6 +21,9 @@ enum class LiuQin(val label: String) {
     ZI_SUN("子孙"),
     ;
 
+    /** ⚠️ 必须返回中文标签，否则枚举名（FU_MU 等）会漏到界面上。 */
+    override fun toString(): String = label
+
     companion object {
         /**
          * 以 [palaceWuXing]（卦宫五行）为我，推导 [yaoWuXing] 的六亲。
@@ -62,6 +65,9 @@ enum class LiuShen(val label: String) {
     XUAN_WU("玄武"),
     ;
 
+    /** ⚠️ 必须返回中文标签，否则枚举名（QING_LONG 等）会漏到界面上。 */
+    override fun toString(): String = label
+
     companion object {
         /** 日干 → 初爻所配六神的下标。 */
         private val START_BY_STEM = intArrayOf(
@@ -101,6 +107,9 @@ enum class YaoPosition(val index: Int, val ordinalLabel: String) {
     WU(4, "五"),
     SHANG(5, "上"),
     ;
+
+    /** ⚠️ 必须返回中文标签，否则枚举名（CHU/ER…）会漏到界面上。 */
+    override fun toString(): String = ordinalLabel
 
     /**
      * 爻题。阳爻称「九」，阴爻称「六」。

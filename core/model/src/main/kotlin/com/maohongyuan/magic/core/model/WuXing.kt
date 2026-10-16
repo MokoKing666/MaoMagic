@@ -23,6 +23,16 @@ enum class WuXing(val label: String) {
     SHUI("水"),
     ;
 
+    /**
+     * ⚠️ 必须重写 `toString()` 返回中文标签。
+     *
+     * 默认实现返回**枚举常量名**（`TU` / `SHUI` / `MU`…），
+     * 一旦被写进字符串插值就会直接漏到界面上 —— 实测出现过
+     * 「戊戌月 · TU旺」这种明显错误的展示。
+     * 这些枚举在 UI 里到处被插值，统一在这里兜住，比在每个调用点加 `.label` 可靠。
+     */
+    override fun toString(): String = label
+
     /** 我生者（我泄气于它） */
     val generates: WuXing get() = entries[(ordinal + 1) % 5]
 
@@ -46,6 +56,9 @@ enum class YinYang(val label: String) {
     YIN("阴"),
     ;
 
+    /** ⚠️ 必须返回中文标签，否则枚举名（YANG/YIN）会漏到界面上。 */
+    override fun toString(): String = label
+
     val opposite: YinYang get() = if (this == YANG) YIN else YANG
 }
 
@@ -68,6 +81,9 @@ enum class WuXingRelation(val label: String) {
     /** 它克我 */
     IT_OVERCOMES("克我"),
     ;
+
+    /** ⚠️ 必须返回中文标签，否则枚举名（SAME/I_GENERATE…）会漏到界面上。 */
+    override fun toString(): String = label
 
     companion object {
         /** 以 [self] 为我，判断 [other] 与我的关系。 */

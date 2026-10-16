@@ -40,6 +40,9 @@ enum class Trigram(
     KUN("坤", "☷", 0b000, WuXing.TU, "西南", "母"),
     ;
 
+    /** ⚠️ 必须返回中文标签，否则枚举名（QIAN/DUI…）会漏到界面上。 */
+    override fun toString(): String = label
+
     /** 初爻是否为阳 */
     val bottomYang: Boolean get() = (bits and 0b001) != 0
 

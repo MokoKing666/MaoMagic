@@ -15,6 +15,16 @@ enum class HeavenlyStem(val label: String) {
     REN("壬"), GUI("癸"),
     ;
 
+    /**
+     * ⚠️ 必须重写 `toString()` 返回中文标签。
+     *
+     * 默认实现返回**枚举常量名**（`TU` / `SHUI` / `MU`…），
+     * 一旦被写进字符串插值就会直接漏到界面上 —— 实测出现过
+     * 「戊戌月 · TU旺」这种明显错误的展示。
+     * 这些枚举在 UI 里到处被插值，统一在这里兜住，比在每个调用点加 `.label` 可靠。
+     */
+    override fun toString(): String = label
+
     val wuXing: WuXing get() = WuXing.entries[ordinal / 2]
 
     val yinYang: YinYang get() = if (ordinal % 2 == 0) YinYang.YANG else YinYang.YIN
@@ -45,6 +55,9 @@ enum class EarthlyBranch(val label: String, val zodiac: String, val wuXing: WuXi
     XU("戌", "狗", WuXing.TU),
     HAI("亥", "猪", WuXing.SHUI),
     ;
+
+    /** ⚠️ 必须返回中文标签，否则枚举名（ZI/CHOU…）会漏到界面上。 */
+    override fun toString(): String = label
 
     val yinYang: YinYang get() = if (ordinal % 2 == 0) YinYang.YANG else YinYang.YIN
 

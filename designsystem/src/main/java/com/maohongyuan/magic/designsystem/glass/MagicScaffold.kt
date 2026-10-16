@@ -26,6 +26,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -113,6 +114,9 @@ fun MagicScaffold(
     // 键盘弹出时底栏让位：否则底栏会悬在键盘上面，或与键盘重叠
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
 
+    // 包成 State 供底栏读取 —— 让传下去的 lambda 实例保持稳定，见下方注释
+    val selectedTabState = rememberUpdatedState(selectedTab)
+
     CompositionLocalProvider(LocalOpenSettings provides onOpenSettings) {
         MagicBackdrop(
             modifier = modifier,
@@ -155,7 +159,16 @@ fun MagicScaffold(
 
                 if (!imeVisible) {
                     LiquidBottomTabs(
-                        selectedTabIndex = { selectedTab },
+                        // ⚠️ 必须传**实例稳定**的 lambda。
+                        //
+                        // 直接写 `{ selectedTab }` 会捕获 Int **值**：值一变，Compose 就得
+                        // 重建 lambda，dock 内部的 LaunchedEffect(selectedTabIndex) 随之重启。
+                        // 更早的版本还因此触发过 `remember(key)` 重置、把气泡的驱动链断掉
+                        // （表现为「点 Tab 页面会切、气泡不动」）。
+                        //
+                        // 用 rememberUpdatedState 把值包成 State，lambda 捕获的是**稳定的 State 对象**，
+                        // 实例在组件生命周期内恒定。
+                        selectedTabIndex = { selectedTabState.value },
                         onTabSelected = onSelectTab,
                         // 覆盖层 → 内容折射源：气泡能真实折射页面内容
                         backdrop = LocalContentBackdrop.current ?: LocalBackdrop.current,

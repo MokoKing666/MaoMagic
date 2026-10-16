@@ -144,7 +144,21 @@ fun LiquidBottomTabs(
 
         val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
         val animationScope = rememberCoroutineScope()
-        var currentIndex by remember(selectedTabIndex) {
+
+        // ⚠️ 这里**绝对不能**写成 `remember(selectedTabIndex) { ... }`。
+        //
+        // 官方原版用的是 `remember(selectedTabIndex)`，但它的调用方传的是**稳定 lambda**
+        // （捕获 State 对象，实例不随值变化）。本项目调用方传的是 `{ selectedTab }` ——
+        // 捕获的是 **Int 值**，值一变 Compose 就得造新 lambda，于是 key 变化、
+        // `remember` 重新初始化，**生成一个新的 MutableIntState**。
+        //
+        // 后果：下面 effectB 里的 `snapshotFlow { currentIndex }` 绑定的是**旧 state 对象**，
+        // 它此后永不变化 → 气泡再也不动。而页面走的是另一条路径（外部 tab 状态直接变），
+        // 所以表现为「点 Tab 页面会切，但气泡不动」。
+        //
+        // 去掉 key 后 state 对象在组件生命周期内恒定，snapshotFlow 才能持续观测到变化。
+        // 外部选中变化由 effectA 负责同步，本来也不需要这个 key。
+        var currentIndex by remember {
             mutableIntStateOf(selectedTabIndex())
         }
         val dampedDragAnimation = remember(animationScope) {
