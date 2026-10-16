@@ -47,5 +47,8 @@ dependencies {
     // iOS 流体玻璃效果引擎（Apache-2.0）
     api(libs.backdrop)
 
+    // 连续曲率形状库（Apache-2.0）。公开 API 里出现了 Capsule / RoundedRectangle，故用 api。
+    api(libs.kyant.shapes)
+
     debugImplementation(libs.compose.ui.tooling)
 }

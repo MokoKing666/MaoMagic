@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.verticalScroll
@@ -154,10 +155,11 @@ fun MagicScaffold(
 
                 if (!imeVisible) {
                     LiquidBottomTabs(
-                        tabs = tabs,
-                        selectedIndex = selectedTab,
-                        onSelect = onSelectTab,
-                        onOpenSettings = onOpenSettings,
+                        selectedTabIndex = { selectedTab },
+                        onTabSelected = onSelectTab,
+                        // 覆盖层 → 内容折射源：气泡能真实折射页面内容
+                        backdrop = LocalContentBackdrop.current ?: LocalBackdrop.current,
+                        tabsCount = tabs.size,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .windowInsetsPadding(WindowInsets.navigationBars)
@@ -165,7 +167,29 @@ fun MagicScaffold(
                                 horizontal = MagicSpacing.screenMargin,
                                 vertical = MagicScaffoldDefaults.TabBarMargin,
                             ),
-                    )
+                    ) {
+                        tabs.forEachIndexed { index, tab ->
+                            LiquidBottomTab(
+                                onClick = { onSelectTab(index) },
+                                // 长按任一 Tab 打开设置（快捷方式；主入口是页面末尾的设置条目）
+                                onLongClick = onOpenSettings,
+                            ) {
+                                // ⚠️ 必须给中性色。选中态的蓝色由着色层折射产生，
+                                // 这里给 accent 会叠成两种不同的蓝。
+                                MagicTabIconView(
+                                    icon = tab.icon,
+                                    tint = LocalMagicColors.current.primaryText,
+                                    selected = index == selectedTab,
+                                    modifier = Modifier.size(22.dp),
+                                )
+                                Text(
+                                    text = tab.label,
+                                    fontSize = MagicType.footnote.sp,
+                                    color = LocalMagicColors.current.primaryText,
+                                )
+                            }
+                        }
+                    }
                 }
 
                 floatingOverlay()

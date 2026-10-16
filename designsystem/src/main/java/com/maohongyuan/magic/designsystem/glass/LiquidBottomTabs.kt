@@ -1,54 +1,61 @@
 package com.maohongyuan.magic.designsystem.glass
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.EaseOut
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.util.fastCoerceIn
+import androidx.compose.ui.util.fastRoundToInt
+import androidx.compose.ui.util.lerp
+import com.kyant.backdrop.Backdrop
+import com.kyant.backdrop.backdrops.layerBackdrop
+import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
+import com.kyant.backdrop.backdrops.rememberLayerBackdrop
+import com.kyant.backdrop.drawBackdrop
+import com.kyant.backdrop.effects.blur
+import com.kyant.backdrop.effects.lens
+import com.kyant.backdrop.effects.vibrancy
+import com.kyant.backdrop.highlight.Highlight
+import com.kyant.backdrop.shadow.InnerShadow
+import com.kyant.backdrop.shadow.Shadow
+import com.kyant.shapes.Capsule
+import com.maohongyuan.magic.designsystem.glass.internal.DampedDragAnimation
+import com.maohongyuan.magic.designsystem.glass.internal.InteractiveHighlight
 import com.maohongyuan.magic.designsystem.theme.LocalMagicColors
-import com.maohongyuan.magic.designsystem.theme.LocalMagicShapes
-import com.maohongyuan.magic.designsystem.theme.MagicSpacing
-import com.maohongyuan.magic.designsystem.theme.MagicType
-import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
+import kotlin.math.abs
+import kotlin.math.sign
 
 @Immutable
 data class LiquidTab(
@@ -57,240 +64,265 @@ data class LiquidTab(
     val icon: MagicTabIcon,
 )
 
-/** 选中指示器高度。48dp 使其胶囊半径恰好等于「外壳半径 − 内边距」，满足同心条件。 */
-private val IndicatorHeight = 48.dp
-
-/** 外壳内边距。同心公式的 padding 项。 */
-private val BarPadding = 8.dp
-
-/** 指示器在滑动途中最大横向拉伸比例。这是「流体」感的来源。 */
-private const val StretchPeak = 1.10f
-
 /**
- * 玻璃底部导航栏。
+ * 流体玻璃底部导航栏 —— **官方实现移植版**。
  *
- * 使用**内容折射源**（[LocalContentBackdrop]），因此页面内容滚动经过它下方时
- * 会被真实折射 —— 这是「流体」感的来源。
+ * 照搬自 AndroidLiquidGlass（Apache-2.0，作者 Kyant0）：
+ * https://github.com/Kyant0/AndroidLiquidGlass （默认分支 `kmp`，不是 main）
  *
- * 必须放在 [MagicBackdrop] 的 `overlay` 插槽里（与内容层平级），
- * 否则会与被 `layerBackdrop` 标记的子树形成引用环并崩溃。
+ * ── 关键认知：「滑动」不是「点了 Tab 后指示器滑过去」──
+ * 而是**用手指直接拖那个气泡**，松手后按速度吸附到最近的 Tab。
+ * 拖动过程中还有**速度驱动的横向拉伸** —— 这才是「流体」感的真正来源：
+ * 不是位移本身，是「速度越大、拉伸越明显」。
  *
- * ── 几何约束 ──
- * 选中指示器不是「随便一个圆角块」。它与外壳必须**同心**：
+ * ── 三层结构（不要改）──
  * ```
- * r_indicator = r_bar − BarPadding
- *             = 32dp − 8dp = 24dp
+ * 层 1  64dp 玻璃壳（可见）                     —— 中性色图标
+ * 层 2  56dp tint(accent) 着色层（alpha 0，不可见但被 layerBackdrop 录制）
+ * 层 3  56dp 气泡（可拖拽）                     —— 折射「页面内容 + 层 2」
  * ```
- * 指示器高度取 48dp ⇒ 胶囊半径 = 48/2 = 24dp ⇒ 与上式**恰好相等**。
- * 外壳用 `RoundedCornerShape(percent = 50)`，因此无论高度怎么变都保持 h/2，
- * 这条等式不会因为系统字号放大而失效。
+ * 「选中图标变蓝」的实现方式是：把整条 Tab 行染成 accent 色放到层 2，
+ * 用 `alpha(0f)` 藏起来，再由层 3 的气泡折射出来。
+ * **不是**给图标单独上色 —— 所以调用方给图标/文字必须是中性色。
  *
- * ── 指示器只有**一个** ──
- * 早期实现让每个 item 各自 `animateColorAsState` 自己的背景色，结果是高亮
- * **原地淡入淡出**，从不位移 —— 看起来「没有动画」。现在改为一个共享指示器，
- * 用 [Animatable] 驱动它的 x 偏移跨 item 滑动，并在途中做一次横向拉伸回弹。
+ * ── 本移植相对官方只改了 4 处 ──
+ * 1. 主题判断：`isSystemInDarkTheme()` → `LocalMagicColors.current.isLight`
+ * 2. 强调色：写死的 `Color(0xFF0088FF)` → `LocalMagicColors.current.accent`
+ * 3. 容器色：写死的 `Color(0xFFFAFAFA / 0xFF121212)` → `GlassLevel.Thick` 的表面不透明度配白
+ * 4. `backdrop` 由调用方传入（本项目传内容折射源）
  *
- * ── 关于指示器的材质 ──
- * 指示器**不**使用独立的 `drawBackdrop`。它靠「半透明白 + 1dp 内描边」表达，
- * 视觉上读作底栏玻璃的一部分。这样既拿到 iOS 那种「材质内选中态」的观感，
- * 又不引入玻璃叠玻璃（每多一层就是一次全屏纹理拷贝 + shader 采样）。
+ * 其余（5 组 spring 参数、`(maxWidth - 8dp) / tabsCount`、两层 Row 结构、
+ * velocity 拉伸公式、pressProgress 驱动的 5 个效果）**一律原样保留**。
+ *
+ * ⚠️ 本组件内部使用了 `rememberLayerBackdrop`（层 2 的 `layerBackdrop`），
+ *    因此**绝不能被放在另一棵 `layerBackdrop` 子树内**，否则渲染死循环 → SIGSEGV。
+ *    本项目由 `MagicScaffold` 放在 `MagicBackdrop` 的 `overlay` 插槽（与内容层平级）。
  */
 @Composable
 fun LiquidBottomTabs(
-    tabs: List<LiquidTab>,
-    selectedIndex: Int,
-    onSelect: (Int) -> Unit,
+    selectedTabIndex: () -> Int,
+    onTabSelected: (index: Int) -> Unit,
+    backdrop: Backdrop,
+    tabsCount: Int,
     modifier: Modifier = Modifier,
-    onOpenSettings: (() -> Unit)? = null,
+    content: @Composable RowScope.() -> Unit,
 ) {
-    val shapes = LocalMagicShapes.current
-    val colors = LocalMagicColors.current
-    val contentBackdrop = LocalContentBackdrop.current
-    val density = LocalDensity.current
+    val magicColors = LocalMagicColors.current
+    val isLightTheme = magicColors.isLight
+    val accentColor = magicColors.accent
 
-    val gapPx = with(density) { MagicSpacing.row.toPx() }
-
-    // 等宽 item，指示器的位置可以直接算出来，不需要给每个 item 记坐标。
-    var rowWidthPx by remember { mutableIntStateOf(0) }
-    val itemWidthPx = if (tabs.isEmpty() || rowWidthPx <= 0) {
-        0f
-    } else {
-        (rowWidthPx - gapPx * (tabs.size - 1)) / tabs.size
-    }
-    val itemWidthDp = with(density) { itemWidthPx.toDp() }
-
-    // 位移与形变分开驱动：位移用 spring，宽度用一次「拉伸 → 回弹」
-    val indicatorX = remember { Animatable(0f) }
-    val indicatorStretch = remember { Animatable(1f) }
-    var placed by remember { mutableStateOf(false) }
-
-    LaunchedEffect(selectedIndex, itemWidthPx) {
-        if (itemWidthPx <= 0f) return@LaunchedEffect
-        val target = selectedIndex * (itemWidthPx + gapPx)
-
-        // 首帧直接落位，避免刚进入页面时指示器从最左侧滑过来
-        if (!placed) {
-            indicatorX.snapTo(target)
-            placed = true
-            return@LaunchedEffect
+    // 容器色沿用本项目的玻璃令牌，不写死
+    val containerColor = Color.White.copy(
+        alpha = if (isLightTheme) {
+            GlassLevel.Thick.surfaceAlphaLight
+        } else {
+            GlassLevel.Thick.surfaceAlphaDark
         }
+    )
 
-        launch {
-            indicatorStretch.snapTo(1f)
-            indicatorStretch.animateTo(
-                targetValue = StretchPeak,
-                animationSpec = tween(durationMillis = 130, easing = FastOutSlowInEasing),
-            )
-            indicatorStretch.animateTo(
-                targetValue = 1f,
-                animationSpec = spring(
-                    dampingRatio = 0.50f,
-                    stiffness = Spring.StiffnessMedium,
-                ),
-            )
-        }
+    val tabsBackdrop = rememberLayerBackdrop()
 
-        indicatorX.animateTo(
-            targetValue = target,
-            animationSpec = spring(
-                // 0.78 → 0.62：回弹更明确，"在动"这件事才看得出来
-                dampingRatio = 0.62f,
-                stiffness = Spring.StiffnessMediumLow,
-            ),
-        )
-    }
-
-    // 同心圆角：外壳胶囊半径 32dp − 内边距 8dp = 24dp = 指示器高度的一半
-    val indicatorShape = remember { RoundedCornerShape(IndicatorHeight / 2) }
-
-    MagicGlassSurface(
-        // 不写死高度：让内容决定，避免不同字号/系统缩放下标签被裁切
-        modifier = modifier.fillMaxWidth(),
-        shape = shapes.tabBar,
-        level = GlassLevel.Thick,
-        backdrop = contentBackdrop,
-        // 覆盖层不投影：iOS 靠材质 + 内描边分层
-        shadow = false,
+    BoxWithConstraints(
+        modifier,
+        contentAlignment = Alignment.CenterStart,
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                // 拉伸中的指示器不能被外壳圆角切掉
-                .clip(shapes.tabBar)
-                .padding(BarPadding)
-                .onSizeChanged { rowWidthPx = it.width },
-        ) {
-            // ① 唯一的那一个指示器
-            if (itemWidthPx > 0f) {
-                Box(
-                    modifier = Modifier
-                        .offset { IntOffset(indicatorX.value.roundToInt(), 0) }
-                        .width(itemWidthDp * indicatorStretch.value)
-                        .height(IndicatorHeight)
-                        .clip(indicatorShape)
-                        // 指示器的填充必须与它所在的表面拉开对比，否则"看不出在动"。
-                        //
-                        // 这里踩过一个坑：原值亮色下用 `White 0.30` ——
-                        // 底栏本身是浅色玻璃（淡米粉底上接近白），
-                        // 再叠 30% 白等于没叠。指示器就算在滑动，视觉上也几乎不可见，
-                        // 用户会误以为"没有滑动动画"。
-                        //
-                        // 亮色：白 0.72，比底栏明显更亮；
-                        // 深色：白 0.14，比底栏略微更亮（暗色下过亮会刺眼）。
-                        .background(
-                            Color.White.copy(alpha = if (colors.isLight) 0.72f else 0.14f)
-                        )
-                        // 描边加粗到 1.5dp 并用强调色，让边界在任何底色上都可辨
-                        .border(
-                            width = 1.5.dp,
-                            color = colors.accent.copy(alpha = 0.20f),
-                            shape = indicatorShape,
-                        ),
-                )
-            }
+        val density = LocalDensity.current
+        // 这个 -8dp 对应外壳的 padding(4dp)，官方标定值，勿改
+        val tabWidth = with(density) {
+            (constraints.maxWidth.toFloat() - 8f.dp.toPx()) / tabsCount
+        }
 
-            // ② item 只负责内容，不再各自画背景
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                tabs.forEachIndexed { index, tab ->
-                    LiquidTabItem(
-                        tab = tab,
-                        selected = index == selectedIndex,
-                        onClick = { onSelect(index) },
-                        onLongClick = onOpenSettings,
-                        modifier = Modifier.weight(1f),
-                    )
+        val offsetAnimation = remember { Animatable(0f) }
+        val panelOffset by remember(density) {
+            derivedStateOf {
+                val fraction = (offsetAnimation.value / constraints.maxWidth).fastCoerceIn(-1f, 1f)
+                with(density) {
+                    4f.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun LiquidTabItem(
-    tab: LiquidTab,
-    selected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    onLongClick: (() -> Unit)? = null,
-) {
-    val colors = LocalMagicColors.current
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-
-    val contentColor by animateColorAsState(
-        targetValue = when {
-            selected -> colors.accent
-            pressed -> colors.primaryText
-            else -> colors.secondaryText
-        },
-        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
-        label = "tabColor",
-    )
-
-    // iOS 的按压反馈是「轻微下沉」，不是 Material ripple。
-    // 早期实现用了 indication = null 且没有 pressed 态 —— 按下去毫无响应。
-    val pressScale by animateFloatAsState(
-        targetValue = if (pressed) 0.90f else 1f,
-        animationSpec = spring(dampingRatio = 0.60f, stiffness = Spring.StiffnessMedium),
-        label = "pressScale",
-    )
-
-    Box(
-        modifier = modifier
-            .height(IndicatorHeight)
-            .clip(RoundedCornerShape(IndicatorHeight / 2))
-            .combinedClickable(
-                interactionSource = interaction,
-                indication = null,
-                onClick = onClick,
-                // 长按任一 Tab 图标 → 打开设置。
-                // 这是快捷方式；主入口是每个页面末尾的设置条目（发现性更好）。
-                onLongClick = onLongClick,
-            ),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-            modifier = Modifier.scale(pressScale),
-        ) {
-            // 选中态填充、未选中描边 —— 不只靠颜色区分（色觉障碍友好）
-            MagicTabIconView(
-                icon = tab.icon,
-                tint = contentColor,
-                selected = selected,
-                modifier = Modifier.size(22.dp),
-            )
-            Text(
-                text = tab.label,
-                fontSize = MagicType.footnote.sp,
-                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                color = contentColor,
+        val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
+        val animationScope = rememberCoroutineScope()
+        var currentIndex by remember(selectedTabIndex) {
+            mutableIntStateOf(selectedTabIndex())
+        }
+        val dampedDragAnimation = remember(animationScope) {
+            DampedDragAnimation(
+                animationScope = animationScope,
+                initialValue = selectedTabIndex().toFloat(),
+                valueRange = 0f..(tabsCount - 1).toFloat(),
+                visibilityThreshold = 0.001f,
+                initialScale = 1f,
+                pressedScale = 78f / 56f,
+                onDragStarted = {},
+                onDragStopped = {
+                    val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabsCount - 1)
+                    currentIndex = targetIndex
+                    animateToValue(targetIndex.toFloat())
+                    animationScope.launch {
+                        offsetAnimation.animateTo(0f, spring(1f, 300f, 0.5f))
+                    }
+                },
+                onDrag = { _, dragAmount ->
+                    updateValue(
+                        (targetValue + dragAmount.x / tabWidth * if (isLtr) 1f else -1f)
+                            .fastCoerceIn(0f, (tabsCount - 1).toFloat())
+                    )
+                    animationScope.launch {
+                        offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
+                    }
+                },
             )
         }
+        LaunchedEffect(selectedTabIndex) {
+            snapshotFlow { selectedTabIndex() }
+                .collectLatest { index ->
+                    currentIndex = index
+                }
+        }
+        LaunchedEffect(dampedDragAnimation) {
+            snapshotFlow { currentIndex }
+                .drop(1)
+                .collectLatest { index ->
+                    dampedDragAnimation.animateToValue(index.toFloat())
+                    onTabSelected(index)
+                }
+        }
+
+        val interactiveHighlight = remember(animationScope) {
+            InteractiveHighlight(
+                animationScope = animationScope,
+                position = { size, _ ->
+                    Offset(
+                        if (isLtr) (dampedDragAnimation.value + 0.5f) * tabWidth + panelOffset
+                        else size.width - (dampedDragAnimation.value + 0.5f) * tabWidth + panelOffset,
+                        size.height / 2f,
+                    )
+                },
+            )
+        }
+
+        // ── 层 1：64dp 玻璃壳（可见，中性色内容）──
+        Row(
+            Modifier
+                .graphicsLayer { translationX = panelOffset }
+                .drawBackdrop(
+                    backdrop = backdrop,
+                    shape = { Capsule() },
+                    effects = {
+                        vibrancy()
+                        blur(8f.dp.toPx())
+                        lens(24f.dp.toPx(), 24f.dp.toPx())
+                    },
+                    layerBlock = {
+                        val progress = dampedDragAnimation.pressProgress
+                        val scale = lerp(1f, 1f + 16f.dp.toPx() / size.width, progress)
+                        scaleX = scale
+                        scaleY = scale
+                    },
+                    onDrawSurface = { drawRect(containerColor) },
+                )
+                .then(interactiveHighlight.modifier)
+                .height(64f.dp)
+                .fillMaxWidth()
+                .padding(4f.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            content = content,
+        )
+
+        // ── 层 2：56dp accent 着色层（alpha 0，不可见；被 tabsBackdrop 录制供气泡折射）──
+        CompositionLocalProvider(
+            LocalLiquidBottomTabScale provides {
+                lerp(1f, 1.2f, dampedDragAnimation.pressProgress)
+            }
+        ) {
+            Row(
+                Modifier
+                    .clearAndSetSemantics {}
+                    .alpha(0f)
+                    .layerBackdrop(tabsBackdrop)
+                    .graphicsLayer { translationX = panelOffset }
+                    .drawBackdrop(
+                        backdrop = backdrop,
+                        shape = { Capsule() },
+                        effects = {
+                            val progress = dampedDragAnimation.pressProgress
+                            vibrancy()
+                            blur(8f.dp.toPx())
+                            lens(24f.dp.toPx() * progress, 24f.dp.toPx() * progress)
+                        },
+                        highlight = {
+                            val progress = dampedDragAnimation.pressProgress
+                            Highlight.Default.copy(alpha = progress)
+                        },
+                        onDrawSurface = { drawRect(containerColor) },
+                    )
+                    .then(interactiveHighlight.modifier)
+                    .height(56f.dp)
+                    .fillMaxWidth()
+                    .padding(horizontal = 4f.dp)
+                    .graphicsLayer(colorFilter = ColorFilter.tint(accentColor)),
+                verticalAlignment = Alignment.CenterVertically,
+                content = content,
+            )
+        }
+
+        // ── 层 3：可拖拽的气泡 ──
+        Box(
+            Modifier
+                .padding(horizontal = 4f.dp)
+                .graphicsLayer {
+                    translationX =
+                        if (isLtr) dampedDragAnimation.value * tabWidth + panelOffset
+                        else size.width - (dampedDragAnimation.value + 1f) * tabWidth + panelOffset
+                }
+                .then(interactiveHighlight.gestureModifier)
+                .then(dampedDragAnimation.modifier)
+                .drawBackdrop(
+                    // 同时折射「页面内容」与「层 2 的着色层」
+                    backdrop = rememberCombinedBackdrop(backdrop, tabsBackdrop),
+                    shape = { Capsule() },
+                    effects = {
+                        val progress = dampedDragAnimation.pressProgress
+                        lens(
+                            10f.dp.toPx() * progress,
+                            14f.dp.toPx() * progress,
+                            chromaticAberration = true,
+                        )
+                    },
+                    highlight = {
+                        val progress = dampedDragAnimation.pressProgress
+                        Highlight.Default.copy(alpha = progress)
+                    },
+                    shadow = {
+                        val progress = dampedDragAnimation.pressProgress
+                        Shadow(alpha = progress)
+                    },
+                    innerShadow = {
+                        val progress = dampedDragAnimation.pressProgress
+                        InnerShadow(radius = 8f.dp * progress, alpha = progress)
+                    },
+                    layerBlock = {
+                        scaleX = dampedDragAnimation.scaleX
+                        scaleY = dampedDragAnimation.scaleY
+                        // 速度驱动的横向拉伸 —— 流体感的核心
+                        val velocity = dampedDragAnimation.velocity / 10f
+                        scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+                        scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
+                    },
+                    onDrawSurface = {
+                        val progress = dampedDragAnimation.pressProgress
+                        drawRect(
+                            if (isLightTheme) Color.Black.copy(0.1f)
+                            else Color.White.copy(0.1f),
+                            alpha = 1f - progress,
+                        )
+                        drawRect(Color.Black.copy(alpha = 0.03f * progress))
+                    },
+                )
+                .height(56f.dp)
+                .fillMaxWidth(1f / tabsCount),
+        )
     }
 }

@@ -11,6 +11,7 @@ coroutines = "1.11.0"
 serializationJson = "1.11.0"
 lunar = "1.7.7"
 backdrop = "2.0.1"
+shapes = "1.2.1"
 okhttp = "4.12.0"
 junit = "4.13.2"
 
@@ -39,6 +40,10 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 lunar = { module = "cn.6tail:lunar", version.ref = "lunar" }
 # iOS 流体玻璃效果引擎（Apache-2.0）
 backdrop = { module = "io.github.kyant0:backdrop", version.ref = "backdrop" }
+# 连续曲率形状库（Apache-2.0）。Capsule 是官方 dock 实现的必需依赖。
+# 它同时提供真正的连续曲率圆角（RoundedRectangle + RoundedCornerStyle.Continuous），
+# 比手写贝塞尔近似更准。原先是 backdrop 的传递依赖，这里显式声明，避免上游改动。
+kyant-shapes = { module = "io.github.kyant0:shapes", version.ref = "shapes" }
 okhttp = { module = "com.squareup.okhttp3:okhttp", version.ref = "okhttp" }
 
 junit = { module = "junit:junit", version.ref = "junit" }

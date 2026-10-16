@@ -51,6 +51,26 @@ android {
     }
 }
 
+/**
+ * debug 构建用**时间戳**作为 versionCode。
+ *
+ * 背景：原先 debug 与 release 共用 `versionCode = 1`。部分厂商 ROM
+ * （实测 vivo / Funtouch）会拦截「同版本号覆盖安装」，`adb install -r`
+ * 仍会返回 `Success`，但设备上跑的还是旧包 —— 于是改了代码却看不到变化。
+ *
+ * 用时间戳后每次构建的 versionCode 都严格递增，覆盖安装必定生效。
+ * release 仍使用 [android.defaultConfig] 里声明的正式版本号。
+ */
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        val stamp = (System.currentTimeMillis() / 1000L).toInt()
+        variant.outputs.forEach { output ->
+            output.versionCode.set(stamp)
+            output.versionName.set("0.1.0-debug.$stamp")
+        }
+    }
+}
+
 // 内建 Kotlin 下 jvmTarget 默认取 android.compileOptions.targetCompatibility，无需显式声明
 
 dependencies {
