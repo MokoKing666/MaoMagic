@@ -3,8 +3,11 @@ package com.maohongyuan.magic.feature.liuyao
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
+import android.app.Application
+import androidx.lifecycle.AndroidViewModel
 import com.maohongyuan.magic.core.calendar.CalendarService
+import com.maohongyuan.magic.core.data.DivinationRecord
+import com.maohongyuan.magic.core.data.DivinationRecordStore
 import com.maohongyuan.magic.core.calendar.DayInfo
 import com.maohongyuan.magic.core.hexagram.CoinThrow
 import com.maohongyuan.magic.core.hexagram.Divination
@@ -47,6 +50,8 @@ data class LiuYaoUiState(
     val throws: List<CoinThrow> = emptyList(),
     /** 起卦中（摇卦动画用） */
     val casting: Boolean = false,
+    /** 历史卦例，按时间倒序 */
+    val history: List<DivinationRecord> = emptyList(),
 ) {
     val canCast: Boolean
         get() = when (method) {
@@ -67,7 +72,9 @@ data class LiuYaoUiState(
  * 2. [LiuYaoDivination] 按日辰月建装卦
  * 3. [InterpreterChain] 走降级链解卦（当前只有 Tier1 可用）
  */
-class LiuYaoViewModel : ViewModel() {
+class LiuYaoViewModel(application: Application) : AndroidViewModel(application) {
+
+    private val recordStore = DivinationRecordStore(application)
 
     var state by mutableStateOf(LiuYaoUiState())
         private set
@@ -77,6 +84,21 @@ class LiuYaoViewModel : ViewModel() {
 
     init {
         refreshDay()
+        viewModelScope.launch {
+            recordStore.records.collect { list ->
+                state = state.copy(history = list)
+            }
+        }
+    }
+
+    // ── 历史 ──────────────────────────────────────────────────
+
+    fun deleteRecord(id: String) {
+        viewModelScope.launch { recordStore.delete(id) }
+    }
+
+    fun clearHistory() {
+        viewModelScope.launch { recordStore.clear() }
     }
 
     fun refreshDay() {
@@ -212,7 +234,32 @@ class LiuYaoViewModel : ViewModel() {
                 )
             }.getOrNull()
             state = state.copy(interpretation = result, interpreting = false)
+            saveRecord(chart, result)
         }
+    }
+
+    /**
+     * 落库。
+     *
+     * **只存卦象与日辰，不存解读全文** —— Tier1 是纯规则引擎，
+     * 同样输入必得同样输出，解读可完全复现；存全文既浪费空间，
+     * 又会在规则演进后与实际结果不一致。
+     */
+    private fun saveRecord(chart: LiuYaoChart, interpretation: Interpretation?) {
+        val now = System.currentTimeMillis()
+        val record = DivinationRecord(
+            id = now.toString(),
+            createdAt = now,
+            method = state.result?.method?.label ?: "",
+            question = state.question,
+            hexagramCode = chart.hexagram.code,
+            movingIndexes = chart.movingIndexes.sorted(),
+            dayGanZhiIndex = chart.dayGanZhi.index,
+            monthBranchOrdinal = chart.monthBranch.ordinal,
+            verdict = interpretation?.verdict?.label,
+            headline = interpretation?.headline,
+        )
+        viewModelScope.launch { recordStore.add(record) }
     }
 
     private fun hourBranchOf(hour: Int): com.maohongyuan.magic.core.model.EarthlyBranch {

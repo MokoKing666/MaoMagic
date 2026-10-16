@@ -32,6 +32,7 @@ dependencies {
     implementation(project(":core:calendar"))
     implementation(project(":core:hexagram"))
     implementation(project(":core:interpret"))
+    implementation(project(":core:data"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)

@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.maohongyuan.magic.core.data.DivinationRecord
 import com.maohongyuan.magic.core.hexagram.CoinThrow
 import com.maohongyuan.magic.core.hexagram.DivinationMethod
 import com.maohongyuan.magic.core.hexagram.LiuYaoChart
@@ -37,6 +38,7 @@ import com.maohongyuan.magic.core.interpret.EngineTier
 import com.maohongyuan.magic.core.interpret.Interpretation
 import com.maohongyuan.magic.core.interpret.Tone
 import com.maohongyuan.magic.core.interpret.Verdict
+import com.maohongyuan.magic.core.model.Hexagram
 import com.maohongyuan.magic.core.model.YaoPosition
 import com.maohongyuan.magic.designsystem.glass.GlassCard
 import com.maohongyuan.magic.designsystem.glass.GlassLevel
@@ -135,6 +137,14 @@ fun LiuyaoScreen(scrollState: ScrollState) {
         }
 
         state.interpretation?.let { InterpretationCard(it) }
+
+        if (state.history.isNotEmpty()) {
+            HistoryCard(
+                records = state.history,
+                onDelete = vm::deleteRecord,
+                onClear = vm::clearHistory,
+            )
+        }
 
         Text(
             text = "术数内容仅供传统文化研究与娱乐，不构成任何决策建议。",
@@ -715,3 +725,120 @@ private fun InterpretationCard(interpretation: Interpretation) {
         )
     }
 }
+
+// ─────────────────────────────────────────────────────────────
+// 历史卦例
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * 最近卦例。
+ *
+ * 只展示，**不做「载入重算」** —— 记录里的日辰是当时的，用今日日辰重装会得出不同结论，
+ * 那反而是误导。要看当时的断语，记录里已存了吉凶与结论。
+ */
+@Composable
+private fun HistoryCard(
+    records: List<DivinationRecord>,
+    onDelete: (String) -> Unit,
+    onClear: () -> Unit,
+) {
+    val colors = LocalMagicColors.current
+    val shown = records.take(20)
+
+    GlassCard(level = GlassLevel.Thin) {
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            MagicSectionTitle("最近卦例", modifier = Modifier.weight(1f))
+            Text(
+                text = "清空",
+                fontSize = MagicType.footnote.sp,
+                color = colors.tertiaryText,
+                modifier = Modifier
+                    .clickable(onClick = onClear)
+                    .padding(horizontal = MagicSpacing.xs, vertical = 2.dp),
+            )
+        }
+        Spacer(Modifier.height(MagicSpacing.md))
+
+        shown.forEachIndexed { index, record ->
+            val hex = Hexagram.of(record.hexagramCode)
+            val verdictColor = when (record.verdict) {
+                Verdict.AUSPICIOUS.label -> colors.auspicious
+                Verdict.INAUSPICIOUS.label -> colors.inauspicious
+                Verdict.MIXED.label -> colors.warning
+                else -> colors.secondaryText
+            }
+            val mark = when (record.verdict) {
+                Verdict.AUSPICIOUS.label -> MagicSemanticMark.AUSPICIOUS
+                Verdict.INAUSPICIOUS.label -> MagicSemanticMark.INAUSPICIOUS
+                Verdict.MIXED.label -> MagicSemanticMark.WARNING
+                else -> null
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { onDelete(record.id) }
+                    .padding(vertical = MagicSpacing.md),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(text = hex.symbol, fontSize = MagicType.title2.sp, color = colors.primaryText)
+                Spacer(Modifier.width(MagicSpacing.md))
+                Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = hex.name,
+                            fontSize = MagicType.subheadline.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = colors.primaryText,
+                        )
+                        if (record.movingIndexes.isNotEmpty()) {
+                            Spacer(Modifier.width(MagicSpacing.xs))
+                            Text(
+                                text = record.movingIndexes.joinToString("") {
+                                    YaoPosition.of(it).ordinalLabel
+                                } + "动",
+                                fontSize = MagicType.caption.sp,
+                                color = colors.accent,
+                            )
+                        }
+                    }
+                    Text(
+                        text = record.question.ifBlank { "（未填写所问）" },
+                        fontSize = MagicType.caption.sp,
+                        color = colors.tertiaryText,
+                        maxLines = 1,
+                    )
+                    Text(
+                        text = "${formatRecordTime(record.createdAt)} · ${record.method}",
+                        fontSize = MagicType.caption.sp,
+                        color = colors.tertiaryText,
+                    )
+                }
+                if (mark != null) {
+                    Text(
+                        text = mark.glyph,
+                        fontSize = MagicType.footnote.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = verdictColor,
+                    )
+                    Spacer(Modifier.width(MagicSpacing.xs))
+                    Text(text = mark.label, fontSize = MagicType.footnote.sp, color = verdictColor)
+                }
+            }
+            if (index != shown.lastIndex) {
+                Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
+            }
+        }
+
+        Spacer(Modifier.height(MagicSpacing.md))
+        MagicCaption("点按条目可删除。记录仅存于本机，不上传任何数据。")
+    }
+}
+
+private val historyTimeFormat: java.time.format.DateTimeFormatter =
+    java.time.format.DateTimeFormatter.ofPattern("MM-dd HH:mm")
+
+private fun formatRecordTime(epochMillis: Long): String =
+    java.time.Instant.ofEpochMilli(epochMillis)
+        .atZone(java.time.ZoneId.systemDefault())
+        .format(historyTimeFormat)
