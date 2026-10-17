@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.maohongyuan.magic.core.calendar.Gender
 import com.maohongyuan.magic.core.data.DivinationRecord
 import com.maohongyuan.magic.core.hexagram.CoinThrow
 import com.maohongyuan.magic.core.hexagram.DivinationMethod
@@ -102,7 +103,21 @@ fun LiuyaoScreen(scrollState: ScrollState) {
             Spacer(Modifier.height(MagicSpacing.md))
             QuestionInput(value = state.question, onValueChange = vm::setQuestion)
             Spacer(Modifier.height(MagicSpacing.md))
-            MagicCaption("所问越具体，断卦越有针对性。一事一卦。")
+            // 性别只影响感情类的用神：男占看妻财，女占看官鬼。
+            // 其他事类不看这个，所以放在「所问何事」下面而不是起卦方式里 ——
+            // 它属于「问什么」，不属于「怎么起卦」。
+            MagicSegmentedControl(
+                options = listOf("男占", "女占"),
+                selectedIndex = if (state.gender == Gender.MALE) 0 else 1,
+                onSelect = {
+                    vm.setGender(if (it == 0) Gender.MALE else Gender.FEMALE)
+                },
+            )
+            Spacer(Modifier.height(MagicSpacing.sm))
+            MagicCaption(
+                "所问越具体，断卦越有针对性。一事一卦。" +
+                    "性别只影响感情类的用神取法。"
+            )
         }
 
         GlassCard(level = GlassLevel.Thin) {

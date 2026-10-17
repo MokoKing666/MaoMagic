@@ -86,6 +86,14 @@ data class InterpretationRequest(
      */
     val chart: DivinationChart,
     /**
+     * 占卜者性别。
+     *
+     * 六爻断婚姻/感情，**男占以妻财为用神，女占以官鬼为用神** ——
+     * 取错则整卦的用神都错。其他事类不受影响。
+     */
+    val gender: com.maohongyuan.magic.core.calendar.Gender =
+        com.maohongyuan.magic.core.calendar.Gender.MALE,
+    /**
      * 月建地支。
      *
      * 六爻盘内已含月建，无需传；**梅花必须传**，否则无法判断体卦旺衰，

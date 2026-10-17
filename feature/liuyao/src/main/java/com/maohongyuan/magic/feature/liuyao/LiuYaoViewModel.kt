@@ -35,6 +35,14 @@ import kotlinx.coroutines.launch
  */
 data class LiuYaoUiState(
     val question: String = "",
+    /**
+     * 占卜者性别。
+     *
+     * 只影响婚姻/感情类的用神取法 —— 男占看妻财，女占看官鬼。
+     * 其他事类不受影响，所以默认男即可，不必强制用户选。
+     */
+    val gender: com.maohongyuan.magic.core.calendar.Gender =
+        com.maohongyuan.magic.core.calendar.Gender.MALE,
     val method: DivinationMethod = DivinationMethod.COIN,
     /** 当前日的日课 —— 日辰与月建由它提供 */
     val day: DayInfo? = null,
@@ -148,6 +156,18 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setQuestion(value: String) {
         state = state.copy(question = value)
+    }
+
+    /**
+     * 设置占卜者性别。
+     *
+     * 只影响婚姻/感情类的用神取法 —— 男占看妻财，女占看官鬼。
+     * 改性别后若已有解卦结果，要重新解一次，否则界面上的结论还是按旧性别算的。
+     */
+    fun setGender(value: com.maohongyuan.magic.core.calendar.Gender) {
+        if (state.gender == value) return
+        state = state.copy(gender = value)
+        state.chart?.let { interpret(it) }
     }
 
     fun selectMethod(value: DivinationMethod) {
@@ -295,6 +315,7 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
                     InterpretationRequest(
                         question = state.question.ifBlank { "综合" },
                         chart = chart,
+                        gender = state.gender,
                     )
                 )
             }.getOrNull()

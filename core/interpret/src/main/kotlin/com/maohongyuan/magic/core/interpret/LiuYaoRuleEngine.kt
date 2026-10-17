@@ -98,11 +98,25 @@ class LiuYaoRuleEngine : DivinationInterpreter {
 
     override fun interpret(request: InterpretationRequest): Flow<Interpretation> {
         val chart = request.chart as? LiuYaoChart ?: return flowOf()
-        return flowOf(analyze(request.question, chart))
+        return flowOf(analyze(request.question, chart, request.gender))
     }
 
-    private fun analyze(question: String, chart: LiuYaoChart): Interpretation {
+    private fun analyze(
+        question: String,
+        chart: LiuYaoChart,
+        gender: com.maohongyuan.magic.core.calendar.Gender,
+    ): Interpretation {
         val category = QuestionCategory.detect(question)
+        // 婚姻/感情：男占看妻财，女占看官鬼。其余事类不分性别。
+        val yongShen = if (category == QuestionCategory.MARRIAGE) {
+            if (gender == com.maohongyuan.magic.core.calendar.Gender.MALE) {
+                LiuQin.QI_CAI
+            } else {
+                LiuQin.GUAN_GUI
+            }
+        } else {
+            category.yongShen
+        }
         // 每个因子带权重：正数助成、负数阻成、零为中性补充。
         // 分开存是为了输出时能分成「有利 / 不利」两栏 —— 之前全塞一个分号串里，
         // 用户读到的是一堆并列的术语，看不出哪条在帮忙、哪条在拖后腿。
@@ -120,22 +134,22 @@ class LiuYaoRuleEngine : DivinationInterpreter {
         val yongWuXing: com.maohongyuan.magic.core.model.WuXing
         var viaFuShen = false
 
-        if (category.yongShen == null) {
+        if (yongShen == null) {
             // 综合类以世爻为用神
             yongLine = chart.shiLine
             yongLabel = "世爻"
             yongWuXing = yongLine.naJia.wuXing
         } else {
-            val direct = chart.linesOf(category.yongShen)
+            val direct = chart.linesOf(yongShen)
             if (direct.isNotEmpty()) {
                 yongLine = direct.first()
-                yongLabel = category.yongShen.label
+                yongLabel = yongShen.label
                 yongWuXing = yongLine.naJia.wuXing
             } else {
                 // 用神不上卦 —— 取伏神
-                val fu = chart.fuShenList.firstOrNull { it.liuQin == category.yongShen }
+                val fu = chart.fuShenList.firstOrNull { it.liuQin == yongShen }
                 yongLine = fu?.let { chart.lines[it.underIndex] }
-                yongLabel = category.yongShen.label
+                yongLabel = yongShen.label
                 yongWuXing = fu?.naJia?.wuXing ?: com.maohongyuan.magic.core.model.WuXing.TU
                 viaFuShen = fu != null
             }
@@ -263,8 +277,14 @@ class LiuYaoRuleEngine : DivinationInterpreter {
         // 白话结论：把卦理翻成「这件事上你该注意什么」
         val advice = ADVICE[category] ?: ADVICE.getValue(QuestionCategory.GENERAL)
         // 结论按维度说 —— 用户问的是一件事，但想知道的是「各方面怎么样」
+        val loveQin = if (gender == com.maohongyuan.magic.core.calendar.Gender.MALE) {
+            LiuQin.QI_CAI
+        } else {
+            LiuQin.GUAN_GUI
+        }
         val dimensions = DIMENSIONS.map { (liuQin, label, hint) ->
-            label to describeDimension(chart, liuQin, hint)
+            val qin = if (label == "感情") loveQin else liuQin
+            label to describeDimension(chart, qin, hint)
         }
 
         val conclusion = buildString {
