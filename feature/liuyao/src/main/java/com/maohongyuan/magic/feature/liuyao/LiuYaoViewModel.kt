@@ -182,6 +182,28 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
         buildChart(result)
     }
 
+    /**
+     * 摇**一爻**（三枚铜钱一次）。
+     *
+     * 铜钱起卦讲究的是「一爻一摇、六摇成卦」—— 一次摇出六爻虽然结果一样，
+     * 但把过程压缩成一个按钮，仪式感就没了。所以拆成六次。
+     *
+     * 背面记 2、正面（字）记 3，三枚相加：6 老阴、7 少阳、8 少阴、9 老阳。
+     * 摇满六爻才建盘。
+     */
+    fun throwOneCoin() {
+        if (state.throws.size >= 6) return
+        val one = CoinThrow(List(3) { if (kotlin.random.Random.nextBoolean()) 3 else 2 })
+        val next = state.throws + one
+        if (next.size >= 6) {
+            val result = runCatching { Divination.byCoin(next) }.getOrNull()
+            state = state.copy(throws = next, result = result)
+            if (result != null) buildChart(result)
+        } else {
+            state = state.copy(throws = next)
+        }
+    }
+
     /** 时间起卦 —— 用当下时刻。 */
     fun castByTime() {
         val day = CalendarService.today()

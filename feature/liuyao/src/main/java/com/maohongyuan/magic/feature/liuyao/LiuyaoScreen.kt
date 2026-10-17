@@ -101,7 +101,7 @@ fun LiuyaoScreen(scrollState: ScrollState) {
             Spacer(Modifier.height(MagicSpacing.cardPadding))
 
             when (state.method) {
-                DivinationMethod.COIN -> CoinPanel(state.throws, vm::castByCoin)
+                DivinationMethod.COIN -> CoinPanel(state.throws, vm::throwOneCoin)
                 DivinationMethod.TIME -> TimePanel(state, vm::castByTime)
                 DivinationMethod.NUMBER -> NumberPanel(
                     a = state.numberA,
@@ -263,6 +263,14 @@ private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
             color = colors.tertiaryText,
         )
 
+        Spacer(Modifier.height(MagicSpacing.row))
+        Text(
+            text = if (throws.isEmpty()) "尚未起摇" else "已摇 ${throws.size} / 6 爻",
+            fontSize = MagicType.footnote.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (throws.isEmpty()) colors.tertiaryText else colors.accent,
+        )
+
         if (throws.isNotEmpty()) {
             Spacer(Modifier.height(MagicSpacing.cardPadding))
             throws.reversed().forEachIndexed { displayIndex, t ->
@@ -280,7 +288,7 @@ private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
                         modifier = Modifier.width(24.dp),
                     )
                     Text(
-                        text = t.coins.joinToString(" "),
+                        text = t.coins.joinToString(" ") { if (it == 3) "字" else "背" },
                         fontSize = MagicType.caption.sp,
                         color = colors.secondaryText,
                         modifier = Modifier.width(72.dp),
@@ -298,7 +306,18 @@ private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
 
         Spacer(Modifier.height(MagicSpacing.cardPadding))
         MagicSolidButton(onClick = onCast, selected = true, modifier = Modifier.fillMaxWidth()) {
-            Text("摇卦", fontSize = MagicType.body.sp, fontWeight = FontWeight.SemiBold, color = colors.accent)
+            // 按钮文案跟着爻位走：「摇初爻」→「摇二爻」→ … →「六爻已齐」。
+            // 用爻位名而不是「第 1 次」，是因为六爻本来就叫初、二、三、四、五、上。
+            Text(
+                text = when {
+                    throws.size >= 6 -> "六爻已齐"
+                    throws.isEmpty() -> "摇初爻"
+                    else -> "摇${YaoPosition.of(throws.size).ordinalLabel}"
+                },
+                fontSize = MagicType.body.sp,
+                fontWeight = FontWeight.SemiBold,
+                color = colors.accent,
+            )
         }
     }
 }
