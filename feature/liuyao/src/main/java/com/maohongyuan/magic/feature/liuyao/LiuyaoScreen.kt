@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -815,6 +819,8 @@ private fun HistoryCard(
 ) {
     val colors = LocalMagicColors.current
     val shown = records.take(20)
+    // 待确认删除的记录 id。null 表示没有待确认项。
+    var pendingDeleteId by remember { mutableStateOf<String?>(null) }
 
     GlassCard(level = GlassLevel.Thin) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -845,10 +851,17 @@ private fun HistoryCard(
                 else -> null
             }
 
+            // ⚠️ 原来这里是 `.clickable { onDelete(record.id) }` —— **单击即永久删除**，
+            // 没有二次确认，也没有「查看」入口。卦例是用户攒下来的东西，
+            // 一次误触就没了（本轮开发中就因此误删过一条）。
+            //
+            // 改成两段式：单击选中 → 行内出现「删除 / 取消」，再点删除才真删。
+            // 代价是多一次点击，换的是不会误删。
+            val pending = pendingDeleteId == record.id
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { onDelete(record.id) }
+                    .clickable { pendingDeleteId = if (pending) null else record.id }
                     .padding(vertical = MagicSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -896,13 +909,41 @@ private fun HistoryCard(
                     Text(text = mark.label, fontSize = MagicType.footnote.sp, color = verdictColor)
                 }
             }
+            if (pending) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = MagicSpacing.md),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = "取消",
+                        fontSize = MagicType.footnote.sp,
+                        color = colors.tertiaryText,
+                        modifier = Modifier
+                            .clickable { pendingDeleteId = null }
+                            .padding(horizontal = MagicSpacing.md, vertical = MagicSpacing.sm),
+                    )
+                    Text(
+                        text = "删除",
+                        fontSize = MagicType.footnote.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colors.inauspicious,
+                        modifier = Modifier
+                            .clickable {
+                                onDelete(record.id)
+                                pendingDeleteId = null
+                            }
+                            .padding(horizontal = MagicSpacing.md, vertical = MagicSpacing.sm),
+                    )
+                }
+            }
             if (index != shown.lastIndex) {
                 Box(modifier = Modifier.fillMaxWidth().height(1.dp).background(colors.divider))
             }
         }
 
         Spacer(Modifier.height(MagicSpacing.md))
-        MagicCaption("点按条目可删除。记录仅存于本机，不上传任何数据。")
+        MagicCaption("点按条目选择，再确认删除。记录仅存于本机，不上传任何数据。")
     }
 }
 
