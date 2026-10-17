@@ -20,6 +20,8 @@ dependencies {
 
     // cn.6tail:lunar 1.7.7 (MIT) — 无第三方依赖，支持 Java 1.5+
     implementation(libs.lunar)
+    // 迁移期并存：先用对拍测试证明两库结果一致，再切实现
+    implementation(libs.tyme4kt)
 
     testImplementation(libs.junit)
 }
