@@ -19,16 +19,18 @@ android {
         versionCode = 2
         versionName = "1.2.0"
 
-        // 只保留 arm64-v8a 与 x86。
+        // 只保留 arm64-v8a —— 纯原生 ARM64 应用。
         //
-        // 砍掉 armeabi-v7a（32 位 ARM）与 x86_64：
-        // - 32 位 ARM 只剩 2015 年前的老机型，Google Play 早就要求 64 位
-        // - x86_64 只用于模拟器，真机没有这个 ABI
-        // 保留 x86 是为了还能在旧模拟器上跑（32 位 x86 镜像）。
+        // 砍掉 armeabi-v7a（32 位 ARM）、x86、x86_64：
+        // - 32 位 ARM 只剩 2015 年前的老机型，Google Play 早已要求 64 位
+        // - x86 / x86_64 只有模拟器用，真机没有
         //
-        // 这些 .so 来自依赖库，不是我们自己编译的（本仓库无 NDK）。
+        // 注意：这些 .so 来自依赖库（androidx 的两个小库），
+        // 本仓库无 NDK、无自研 native 代码。
+        // 所以砍 ABI 对包体几乎无影响（lib 只占 0.1%），
+        // 真正的体积优化是下面的 R8。
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
