@@ -69,7 +69,7 @@ enum class SystemId(
      * 而不是进到一个空白页 —— 空白页会让人以为应用坏了。
      */
     val available: Boolean get() = when (this) {
-        BAZI, LIUYAO, MEIHUA, ALMANAC, XIAOLIUREN -> true
+        BAZI, LIUYAO, MEIHUA, ALMANAC, XIAOLIUREN, TAROT -> true
         else -> false
     }
 
