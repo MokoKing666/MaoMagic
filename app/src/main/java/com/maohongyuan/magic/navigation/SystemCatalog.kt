@@ -54,7 +54,8 @@ enum class SystemId(
 
     // ── 现代 ──
     TAROT("塔罗", "抽牌解牌", MagicTabIcon.SYS_TAROT, AppTab.MODERN),
-    MBTI("MBTI", "性格测评", MagicTabIcon.SYS_MBTI, AppTab.MODERN),
+    // ⚠️ 不叫 MBTI —— 那是 The Myers-Briggs Company 的注册商标。
+    MBTI("十六型人格", "荣格类型", MagicTabIcon.SYS_MBTI, AppTab.MODERN),
 
     // ── 日常 ──
     ALMANAC("黄历", "今日宜忌", MagicTabIcon.SYS_ALMANAC, AppTab.DAILY),
@@ -69,7 +70,7 @@ enum class SystemId(
      * 而不是进到一个空白页 —— 空白页会让人以为应用坏了。
      */
     val available: Boolean get() = when (this) {
-        BAZI, LIUYAO, MEIHUA, ALMANAC, XIAOLIUREN, TAROT -> true
+        BAZI, LIUYAO, MEIHUA, ALMANAC, XIAOLIUREN, TAROT, MBTI -> true
         else -> false
     }
 

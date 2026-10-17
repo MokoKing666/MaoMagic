@@ -11,7 +11,7 @@ enum class DivinationSystem(val label: String) {
     BA_ZI("八字"),
     XIAO_LIU_REN("小六壬"),
     TAROT("塔罗"),
-    MBTI("MBTI"),
+    MBTI("十六型"),
     DAILY_FORTUNE("日运"),
     MONTHLY_FORTUNE("月运"),
     ZI_WEI("紫微斗数"),
