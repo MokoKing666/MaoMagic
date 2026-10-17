@@ -45,4 +45,8 @@ dependencies {
     // LiteRT-LM：支持 .litertlm 容器，有 MediaTek/Qualcomm NPU 运行时。
     // 坐标在 **Google Maven**（不在 Maven Central）。
     implementation(libs.litertlm.android)
+    // LiteRT GPU 加速器：libLiteRtClGlAccelerator.so 同时支持 OpenCL 与 OpenGL。
+    // 本机 OpenCL 不可达（驱动不在白名单），但 GLES 可用 ——
+    // 加上它，LiteRT-LM 的 GPU 后端可能走 GL 而不是 CL。
+    implementation("com.google.ai.edge.litert:litert-gpu:2.3.0")
 }
