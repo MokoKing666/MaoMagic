@@ -61,23 +61,13 @@ object MagicScaffoldDefaults {
     /** 顶部渐隐遮罩高度。内容滚过时淡出，而不是硬切在状态栏下。 */
     val TopScrimHeight: Dp = 88.dp
 
-    /** 右上角设置按钮的直径。44dp 是单手拇指可点的最小舒适尺寸 */
-    val SettingsButtonSize: Dp = 44.dp
+    /** 顶部浮动圆钮（返回 / 其它）的直径。44dp 是单手拇指可点的最小舒适尺寸 */
+    val IconButtonSize: Dp = 44.dp
 
     /** 底栏上方的滚动边缘渐变高度 */
     val ScrollEdgeHeight: Dp = 152.dp
 }
 
-/**
- * 「打开设置」的注入点。
- *
- * 设置入口是**右上角的玻璃圆钮**（见下方 overlay），全局固定、始终可见。
- * 页面末尾由 [MagicPageContent] 自动追加一个入口，底栏图标长按也能打开 ——
- * 两条路径，保证可发现性。
- */
-val LocalOpenSettings = staticCompositionLocalOf<() -> Unit> {
-    error("MagicScaffold 未提供 onOpenSettings")
-}
 
 /**
  * 应用外壳。
@@ -90,9 +80,9 @@ val LocalOpenSettings = staticCompositionLocalOf<() -> Unit> {
  * - 每个 Tab 各自记住滚动位置（iOS 行为，不是每次切回顶部）
  *
  * ⚠️ **本外壳没有顶部导航栏。** 这是刻意的：
- * 顶部只保留一层无文字、无按钮的纯渐变遮罩。
- * 页面身份由页面内的 [MagicPageHeader] 大标题承担；
- * 另有底栏长按作为快捷方式（发现性差，只作补充）。
+ * 顶部只保留一层无文字、无按钮的纯渐变遮罩，
+ * 页面身份由页面内的 [MagicPageHeader] 大标题承担。
+ * 唯一的例外是钻取到功能页时左上角出现的返回钮（见 [onBack]）。
  *
  * 页面内容请用 [MagicPageContent] 承载，它已内置一致的 insets 与内边距。
  */
@@ -101,7 +91,14 @@ fun MagicScaffold(
     tabs: List<LiquidTab>,
     selectedTab: Int,
     onSelectTab: (Int) -> Unit,
-    onOpenSettings: () -> Unit,
+    /**
+     * 返回上一级。
+     *
+     * `null` = 当前在顶层（板块首页），不显示返回钮。
+     * 非 null 时左上角出现一个玻璃圆钮 —— 它复用原先「设置」按钮的位置，
+     * 这样顶部依然没有导航栏，视觉槽位也没有浪费。
+     */
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
     glassMode: GlassMode = GlassMode.FULL,
     floatingOverlay: @Composable BoxScope.() -> Unit = {},
@@ -121,134 +118,130 @@ fun MagicScaffold(
     // 包成 State 供底栏读取 —— 让传下去的 lambda 实例保持稳定，见下方注释
     val selectedTabState = rememberUpdatedState(selectedTab)
 
-    CompositionLocalProvider(LocalOpenSettings provides onOpenSettings) {
-        MagicBackdrop(
-            modifier = modifier,
-            glassMode = glassMode,
-            content = { content(scrollState) },
-            overlay = {
-                // ── 顶部滚动边缘效果 ──
-                // iOS 26 的滚动边缘效果本质是**渐进模糊**（贴边最糊、向内递减），
-                // 而不是单纯压一层渐变 —— 后者只是「变暗」，不是「失焦」。
-                // 这里用 MagicProgressiveBlur，再叠一层很淡的 scrim 保证状态栏图标可读。
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                        .height(MagicScaffoldDefaults.TopScrimHeight)
-                ) {
-                    MagicProgressiveBlur(
-                        height = MagicScaffoldDefaults.TopScrimHeight,
-                        maxBlur = 14.dp,
-                        edge = BlurEdge.TOP,
-                        backdrop = LocalContentBackdrop.current ?: LocalBackdrop.current,
-                        scrimColor = colors.backdropBase,
-                        scrimMaxAlpha = 0.58f,
-                    )
-                }
-
-                // ── 设置入口：右上角 ──
-                //
-                // 位置分析（原先的两个入口都不合格）：
-                //   · 页面末尾：长页面要滚到底才看得到，位置还随内容长度浮动，无法形成肌肉记忆
-                //   · 长按 Tab：**零可发现性**，没有任何视觉提示，用户根本不会试
-                //
-                // 右上角是 iOS 放 trailing 导航按钮的惯例位置：固定不动、始终可见、单手可达。
-                // 用一个玻璃圆钮而不是重开一条导航栏 —— 保持「顶部无栏」的既定设计。
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .windowInsetsPadding(WindowInsets.statusBars)
-                        .padding(end = MagicSpacing.screenMargin, top = MagicSpacing.xs),
-                ) {
-                    MagicGlassSurface(
-                        modifier = Modifier
-                            .size(MagicScaffoldDefaults.SettingsButtonSize)
-                            .clip(LocalMagicShapes.current.pill)
-                            .clickable(onClick = onOpenSettings),
-                        shape = LocalMagicShapes.current.pill,
-                        level = GlassLevel.Thin,
-                        shadow = false,
-                    ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            MagicTuneIcon(
-                                tint = colors.primaryText,
-                                modifier = Modifier.size(
-                                    MagicScaffoldDefaults.SettingsButtonSize * 0.44f
-                                ),
-                            )
-                        }
-                    }
-                }
-
-                // ── 滚动边缘效果（底部）──
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(MagicScaffoldDefaults.ScrollEdgeHeight)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    colors.backdropBase.copy(alpha = 0.94f),
-                                )
-                            )
-                        )
+    MagicBackdrop(
+        modifier = modifier,
+        glassMode = glassMode,
+        content = { content(scrollState) },
+        overlay = {
+            // ── 顶部滚动边缘效果 ──
+            // iOS 26 的滚动边缘效果本质是**渐进模糊**（贴边最糊、向内递减），
+            // 而不是单纯压一层渐变 —— 后者只是「变暗」，不是「失焦」。
+            // 这里用 MagicProgressiveBlur，再叠一层很淡的 scrim 保证状态栏图标可读。
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(MagicScaffoldDefaults.TopScrimHeight)
+            ) {
+                MagicProgressiveBlur(
+                    height = MagicScaffoldDefaults.TopScrimHeight,
+                    maxBlur = 14.dp,
+                    edge = BlurEdge.TOP,
+                    backdrop = LocalContentBackdrop.current ?: LocalBackdrop.current,
+                    scrimColor = colors.backdropBase,
+                    scrimMaxAlpha = 0.58f,
                 )
+            }
 
-                if (!imeVisible) {
-                    LiquidBottomTabs(
-                        // ⚠️ 必须传**实例稳定**的 lambda。
-                        //
-                        // 直接写 `{ selectedTab }` 会捕获 Int **值**：值一变，Compose 就得
-                        // 重建 lambda，dock 内部的 LaunchedEffect(selectedTabIndex) 随之重启。
-                        // 更早的版本还因此触发过 `remember(key)` 重置、把气泡的驱动链断掉
-                        // （表现为「点 Tab 页面会切、气泡不动」）。
-                        //
-                        // 用 rememberUpdatedState 把值包成 State，lambda 捕获的是**稳定的 State 对象**，
-                        // 实例在组件生命周期内恒定。
-                        selectedTabIndex = { selectedTabState.value },
-                        onTabSelected = onSelectTab,
-                        // 覆盖层 → 内容折射源：气泡能真实折射页面内容
-                        backdrop = LocalContentBackdrop.current ?: LocalBackdrop.current,
-                        tabsCount = tabs.size,
+                // ── 返回钮：左上角 ──
+                //
+                // 只在钻取到功能页时出现。复用原先「设置」按钮的视觉槽位，
+                // 维持「顶部无导航栏」的既定设计 —— 只有一个浮动的玻璃圆钮。
+                if (onBack != null) {
+                    Box(
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .windowInsetsPadding(WindowInsets.navigationBars)
-                            .padding(
-                                horizontal = MagicSpacing.screenMargin,
-                                vertical = MagicScaffoldDefaults.TabBarMargin,
-                            ),
+                            .align(Alignment.TopStart)
+                            .windowInsetsPadding(WindowInsets.statusBars)
+                            .padding(start = MagicSpacing.screenMargin, top = MagicSpacing.xs),
                     ) {
-                        tabs.forEachIndexed { index, tab ->
-                            LiquidBottomTab(
-                                onClick = { onSelectTab(index) },
-                                // 长按任一 Tab 打开设置（快捷方式；主入口是右上角按钮）
-                                onLongClick = onOpenSettings,
-                            ) {
-                                // ⚠️ 必须给中性色。选中态的蓝色由着色层折射产生，
-                                // 这里给 accent 会叠成两种不同的蓝。
-                                MagicTabIconView(
-                                    icon = tab.icon,
-                                    tint = LocalMagicColors.current.primaryText,
-                                    selected = index == selectedTab,
-                                    modifier = Modifier.size(22.dp),
-                                )
-                                Text(
-                                    text = tab.label,
-                                    fontSize = MagicType.footnote.sp,
-                                    color = LocalMagicColors.current.primaryText,
+                        MagicGlassSurface(
+                            modifier = Modifier
+                                .size(MagicScaffoldDefaults.IconButtonSize)
+                                .clip(LocalMagicShapes.current.pill)
+                                .clickable(onClick = onBack),
+                            shape = LocalMagicShapes.current.pill,
+                            level = GlassLevel.Thin,
+                            shadow = false,
+                        ) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                MagicBackIcon(
+                                    tint = colors.primaryText,
+                                    modifier = Modifier.size(
+                                        MagicScaffoldDefaults.IconButtonSize * 0.44f
+                                    ),
                                 )
                             }
                         }
                     }
                 }
 
-                floatingOverlay()
-            },
-        )
-    }
+            // ── 滚动边缘效果（底部）──
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(MagicScaffoldDefaults.ScrollEdgeHeight)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                colors.backdropBase.copy(alpha = 0.94f),
+                            )
+                        )
+                    )
+            )
+
+            if (!imeVisible) {
+                LiquidBottomTabs(
+                    // ⚠️ 必须传**实例稳定**的 lambda。
+                    //
+                    // 直接写 `{ selectedTab }` 会捕获 Int **值**：值一变，Compose 就得
+                    // 重建 lambda，dock 内部的 LaunchedEffect(selectedTabIndex) 随之重启。
+                    // 更早的版本还因此触发过 `remember(key)` 重置、把气泡的驱动链断掉
+                    // （表现为「点 Tab 页面会切、气泡不动」）。
+                    //
+                    // 用 rememberUpdatedState 把值包成 State，lambda 捕获的是**稳定的 State 对象**，
+                    // 实例在组件生命周期内恒定。
+                    selectedTabIndex = { selectedTabState.value },
+                    onTabSelected = onSelectTab,
+                    // 覆盖层 → 内容折射源：气泡能真实折射页面内容
+                    backdrop = LocalContentBackdrop.current ?: LocalBackdrop.current,
+                    tabsCount = tabs.size,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .padding(
+                            horizontal = MagicSpacing.screenMargin,
+                            vertical = MagicScaffoldDefaults.TabBarMargin,
+                        ),
+                ) {
+                    tabs.forEachIndexed { index, tab ->
+                        LiquidBottomTab(
+                            onClick = { onSelectTab(index) },
+                        ) {
+                            // ⚠️ 必须给中性色。选中态的蓝色由着色层折射产生，
+                            // 这里给 accent 会叠成两种不同的蓝。
+                            MagicTabIconView(
+                                icon = tab.icon,
+                                tint = LocalMagicColors.current.primaryText,
+                                selected = index == selectedTab,
+                                modifier = Modifier.size(22.dp),
+                            )
+                            Text(
+                                text = tab.label,
+                                fontSize = MagicType.footnote.sp,
+                                color = LocalMagicColors.current.primaryText,
+                            )
+                        }
+                    }
+                }
+            }
+
+            floatingOverlay()
+        },
+    )
+
+
 }
 
 /**

@@ -1,6 +1,22 @@
 package com.maohongyuan.magic.designsystem.glass
 
 import androidx.compose.foundation.Canvas
+import com.maohongyuan.magic.designsystem.glass.icons.drawBoardDaily
+import com.maohongyuan.magic.designsystem.glass.icons.drawBoardModern
+import com.maohongyuan.magic.designsystem.glass.icons.drawBoardTraditional
+import com.maohongyuan.magic.designsystem.glass.icons.drawSettings
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysAlmanac
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysBaZi
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysDaLiuRen
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysDaily
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysLiuYao
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysMbti
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysMeiHua
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysMonthly
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysQiMen
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysTarot
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysXiaoLiuRen
+import com.maohongyuan.magic.designsystem.glass.icons.drawSysZiWei
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -27,7 +43,18 @@ import kotlin.math.sin
  *
  * 选中态用**填充**、未选中用**描边**，不只靠颜色区分（色觉障碍友好）。
  */
-enum class MagicTabIcon { FOUR_PILLARS, SIX_YAO, PLUM_FLOWER, ALMANAC }
+enum class MagicTabIcon {
+    // ── 原有四个系统 ──
+    FOUR_PILLARS, SIX_YAO, PLUM_FLOWER, ALMANAC,
+
+    // ── 板块（底栏）──
+    BOARD_TRADITIONAL, BOARD_MODERN, BOARD_DAILY, SETTINGS,
+
+    // ── 其余术数系统（板块页卡片用）──
+    SYS_BAZI, SYS_ZIWEI, SYS_LIUYAO, SYS_MEIHUA,
+    SYS_XIAOLIUREN, SYS_DALIUREN, SYS_QIMEN,
+    SYS_TAROT, SYS_MBTI, SYS_ALMANAC, SYS_DAILY, SYS_MONTHLY,
+}
 
 @Composable
 fun MagicTabIconView(
@@ -38,10 +65,31 @@ fun MagicTabIconView(
 ) {
     Canvas(modifier = modifier) {
         when (icon) {
+            // 原有四个（保留在 package glass，不动）
             MagicTabIcon.FOUR_PILLARS -> drawFourPillars(tint, selected)
             MagicTabIcon.SIX_YAO -> drawSixYao(tint, selected)
             MagicTabIcon.PLUM_FLOWER -> drawPlumFlower(tint, selected)
             MagicTabIcon.ALMANAC -> drawAlmanac(tint, selected)
+
+            // 板块
+            MagicTabIcon.BOARD_TRADITIONAL -> drawBoardTraditional(tint, selected)
+            MagicTabIcon.BOARD_MODERN -> drawBoardModern(tint, selected)
+            MagicTabIcon.BOARD_DAILY -> drawBoardDaily(tint, selected)
+            MagicTabIcon.SETTINGS -> drawSettings(tint, selected)
+
+            // 系统
+            MagicTabIcon.SYS_BAZI -> drawSysBaZi(tint, selected)
+            MagicTabIcon.SYS_ZIWEI -> drawSysZiWei(tint, selected)
+            MagicTabIcon.SYS_LIUYAO -> drawSysLiuYao(tint, selected)
+            MagicTabIcon.SYS_MEIHUA -> drawSysMeiHua(tint, selected)
+            MagicTabIcon.SYS_XIAOLIUREN -> drawSysXiaoLiuRen(tint, selected)
+            MagicTabIcon.SYS_DALIUREN -> drawSysDaLiuRen(tint, selected)
+            MagicTabIcon.SYS_QIMEN -> drawSysQiMen(tint, selected)
+            MagicTabIcon.SYS_TAROT -> drawSysTarot(tint, selected)
+            MagicTabIcon.SYS_MBTI -> drawSysMbti(tint, selected)
+            MagicTabIcon.SYS_ALMANAC -> drawSysAlmanac(tint, selected)
+            MagicTabIcon.SYS_DAILY -> drawSysDaily(tint, selected)
+            MagicTabIcon.SYS_MONTHLY -> drawSysMonthly(tint, selected)
         }
     }
 }
