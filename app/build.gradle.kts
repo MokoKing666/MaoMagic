@@ -125,6 +125,7 @@ dependencies {
     implementation(project(":feature:fortune"))
     implementation(project(":feature:ziwei"))
     implementation(project(":feature:daliuren"))
+    implementation(project(":feature:qimen"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
