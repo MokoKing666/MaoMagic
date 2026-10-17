@@ -6,12 +6,18 @@ import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.input.pointer.pointerInput
@@ -54,7 +60,7 @@ class GlassPressState(
 ) {
     /** 按压进度 0..1，带回弹 */
     private val progress = Animatable(0f, 0.001f)
-    private val offsetAnim = Animatable(Offset.Zero, Offset.VectorConverter, Offset.VisibilityThreshold)
+    internal val offsetAnim = Animatable(Offset.Zero, Offset.VectorConverter, Offset.VisibilityThreshold)
     private var downAt = Offset.Zero
 
     private val progressSpec = spring(0.5f, 300f, 0.001f)
@@ -63,7 +69,7 @@ class GlassPressState(
     val pressProgress: Float get() = progress.value
 
     /** 当前手指相对按下点的偏移 */
-    private val dragOffset: Offset get() = offsetAnim.value - downAt
+    internal val dragOffset: Offset get() = offsetAnim.value - downAt
 
     /**
      * 玻璃层形变。传给 `drawBackdrop(layerBlock = state.layerBlock())`。
@@ -106,7 +112,7 @@ class GlassPressState(
         val p = progress.value
         return Highlight(
             width = 1.dp,
-            blurRadius = lerp(0.dp, 12.dp, p),
+            blurRadius = androidx.compose.ui.unit.lerp(0.dp, 12.dp, p),
             alpha = 0.12f * p,
             style = HighlightStyle.Default,
         )
@@ -153,6 +159,55 @@ class GlassPressState(
         }
 
 }
+
+
+/**
+ * 内容玻璃用的按压形变。
+ *
+ * 九宫格卡片是「内容玻璃」，本身没有 backdrop，改不了 layerBlock。
+ * 这里直接对内容做 graphicsLayer 形变，公式与 layerBlock 一致
+ * （tanh 位移 + 各向异性），视觉上仍是「被按下去」。
+ */
+fun GlassPressState.contentModifier(onClick: () -> Unit): Modifier = modifier(onClick).then(
+    Modifier.graphicsLayer {
+        val p = pressProgress
+        if (p > 0.001f) {
+            val w = size.width
+            val h = size.height
+            if (w > 0f && h > 0f) {
+                val base = lerp(1f, 1f - 3f.dp.toPx() / h, p)
+                val d = dragOffset
+                val maxOffset = size.minDimension
+                translationX = maxOffset * tanh(0.05f * d.x / maxOffset)
+                translationY = maxOffset * tanh(0.05f * d.y / maxOffset)
+                val maxDragScale = 3f.dp.toPx() / h
+                val angle = atan2(d.y, d.x)
+                scaleX = base + maxDragScale * abs(cos(angle) * d.x / size.maxDimension) *
+                    (w / h).fastCoerceAtMost(1f)
+                scaleY = base + maxDragScale * abs(sin(angle) * d.y / size.maxDimension) *
+                    (h / w).fastCoerceAtMost(1f)
+            }
+        }
+    },
+).then(
+    Modifier.drawWithContent {
+        drawContent()
+        val p = pressProgress
+        if (p > 0.001f) {
+            val c = offsetAnim.value
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(Color.White.copy(alpha = 0.18f * p), Color.Transparent),
+                    center = c,
+                    radius = size.minDimension * 1.5f,
+                ),
+                radius = size.minDimension * 1.5f,
+                center = c,
+                blendMode = BlendMode.Plus,
+            )
+        }
+    },
+)
 
 @Composable
 fun rememberGlassPress(): GlassPressState {

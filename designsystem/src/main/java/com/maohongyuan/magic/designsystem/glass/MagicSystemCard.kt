@@ -1,6 +1,5 @@
 package com.maohongyuan.magic.designsystem.glass
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -48,14 +47,17 @@ fun MagicSystemCard(
 ) {
     val colors = LocalMagicColors.current
     val shapes = LocalMagicShapes.current
+    // 按压张力：玻璃被按下、朝手指方向拉伸、亮起光斑。
+    // 公式抄自 Kyant0/AndroidLiquidGlass 的 LiquidButton。
+    val press = rememberGlassPress()
 
-    // ⚠️ clickable 必须挂在 GlassCard 的 modifier 上，不能挂在卡片内部的 Row 上。
+    // ⚠️ 手势必须挂在 GlassCard 的 modifier 上，不能挂在内部的 Row 上。
     // 挂在内部时点击不生效 —— 实测过（顶部那个设置齿轮当初能用，
     // 正是因为它把 clickable 挂在了 MagicGlassSurface 的 modifier 上）。
     GlassCard(
         modifier = modifier
             .clip(shapes.card)
-            .clickable(onClick = onClick),
+            .then(press.contentModifier(onClick)),
         level = GlassLevel.Thin,
     ) {
         Row(
