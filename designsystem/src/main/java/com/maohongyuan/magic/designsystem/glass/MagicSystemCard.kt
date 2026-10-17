@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maohongyuan.magic.designsystem.theme.MagicShapes
@@ -80,7 +81,12 @@ fun MagicSystemCard(
             ) {
                 Text(
                     text = title,
-                    fontSize = MagicType.body.sp,
+                    // 长名字（5 字以上）降一档字号 + 单行截断。
+                    // 原来不限制：中文会任意处断行，「十六型人格」被切成
+                    // 「十六型人 / 格」，看着像排版坏了。
+                    fontSize = if (title.length >= 5) MagicType.footnote.sp else MagicType.body.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.primaryText,
                 )

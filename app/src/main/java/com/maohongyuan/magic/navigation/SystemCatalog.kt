@@ -55,7 +55,7 @@ enum class SystemId(
     // ── 现代 ──
     TAROT("塔罗", "抽牌解牌", MagicTabIcon.SYS_TAROT, AppTab.MODERN),
     // ⚠️ 不叫 MBTI —— 那是 The Myers-Briggs Company 的注册商标。
-    MBTI("十六型人格", "荣格类型", MagicTabIcon.SYS_MBTI, AppTab.MODERN),
+    MBTI("人格类型", "十六型 · 荣格", MagicTabIcon.SYS_MBTI, AppTab.MODERN),
 
     // ── 日常 ──
     ALMANAC("黄历", "今日宜忌", MagicTabIcon.SYS_ALMANAC, AppTab.DAILY),
