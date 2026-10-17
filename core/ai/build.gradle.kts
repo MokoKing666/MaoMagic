@@ -31,4 +31,7 @@ dependencies {
     implementation(libs.okhttp)
 
     testImplementation(libs.junit)
+    // 端上推理（Tier3）。坐标在 **Google Maven**，不在 Maven Central ——
+    // 用 repo1 探测会 404，settings.gradle.kts 里的 google() 才有。
+    implementation(libs.mediapipe.tasks.genai)
 }
