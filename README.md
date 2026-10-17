@@ -181,3 +181,37 @@ bash tools/install-debug.sh    # 构建 + 安装 + 校验设备版本
 架构决策见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)，
 设计约束见 [docs/UI-DESIGN-RULES.md](docs/UI-DESIGN-RULES.md)，
 起卦取数规则见 [docs/DIVINATION_RULES.md](docs/DIVINATION_RULES.md)。
+
+## 数据与文本来源
+
+本项目的文本内容分三类，来源与许可各不相同：
+
+| 内容 | 来源 | 许可 |
+|---|---|---|
+| 历法、干支、八字、黄历、节气 | [lunar](https://github.com/6tail/lunar-java) | MIT |
+| 六爻装卦、64 卦名、梅花、小六壬、八字/日运/月运断语 | 本项目自研（算法生成或自撰） | MIT |
+| 塔罗 78 张牌义 | 依 A. E. Waite《The Pictorial Key to the Tarot》(1911) 译写 | 该著作已进入**公有领域** |
+| 十六型人格题库与类型描述 | 本项目自编（依荣格类型理论） | MIT |
+
+### 关于塔罗
+
+韦特-史密斯牌组（1909）的画面与体系已进入公有领域，本项目据此译写牌义。
+**未使用**任何现代塔罗出版物（如 Pollack《Seventy-Eight Degrees of Wisdom》、
+Mary K. Greer 的教学体系、Joan Bunning 的在线资料）的文字 —— 这些均受版权保护，
+且「免费公开」不等于「可自由复用」。
+
+本项目也未做「如有侵权请联系删除」一类的声明：该声明在中国法律下不产生免责效力，
+且书面承认明知风险在赔偿裁量中属加重情节而非减轻。MIT 协议允许再分发，
+因此上游若含侵权内容，风险会转移给每一位下游使用者 —— 所以从一开始就不引入。
+
+### 关于十六型人格
+
+**不是 MBTI®。** MBTI 是 The Myers-Briggs Company 的注册商标，官方问卷需付费授权。
+**也不是 NERIS Type Explorer®**（16Personalities 的专有模型，五维、多一个 A/T 维度，
+其官网明确写着 "not the official MBTI®"）。
+
+本项目的 60 道题与 16 型描述均为自编，类型别称亦自起（不沿用 16Personalities 的
+「建筑师」「提倡者」等品牌化命名）。
+
+另需说明：四维类型把连续倾向切成两类，落在中间的人结果本就不稳定，
+相当比例的人隔几周重测会得到不同类型。这是该框架本身的边界，不是测量误差。

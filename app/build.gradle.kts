@@ -122,6 +122,7 @@ dependencies {
     implementation(project(":feature:xiaoliuren"))
     implementation(project(":feature:tarot"))
     implementation(project(":feature:personality"))
+    implementation(project(":feature:fortune"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

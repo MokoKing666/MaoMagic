@@ -34,6 +34,8 @@ import com.maohongyuan.magic.feature.almanac.AlmanacScreen
 import com.maohongyuan.magic.feature.bazi.BaziScreen
 import com.maohongyuan.magic.feature.liuyao.LiuyaoScreen
 import com.maohongyuan.magic.feature.meihua.MeihuaScreen
+import com.maohongyuan.magic.core.fortune.FortunePeriod
+import com.maohongyuan.magic.feature.fortune.FortuneScreen
 import com.maohongyuan.magic.feature.personality.PersonalityScreen
 import com.maohongyuan.magic.feature.tarot.TarotScreen
 import com.maohongyuan.magic.feature.xiaoliuren.XiaoLiuRenScreen
@@ -217,6 +219,8 @@ private fun FeatureHost(
         SystemId.XIAOLIUREN -> XiaoLiuRenScreen(scrollState)
         SystemId.TAROT -> TarotScreen(scrollState)
         SystemId.MBTI -> PersonalityScreen(scrollState)
+        SystemId.DAILY_FORTUNE -> FortuneScreen(FortunePeriod.DAILY, scrollState)
+        SystemId.MONTHLY_FORTUNE -> FortuneScreen(FortunePeriod.MONTHLY, scrollState)
         SystemId.ALMANAC -> AlmanacScreen(
             scrollState = scrollState,
             // 日运尚未实现时不显示这条动线 —— 宁可没有入口，

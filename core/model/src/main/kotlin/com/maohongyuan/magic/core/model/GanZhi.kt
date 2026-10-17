@@ -74,6 +74,14 @@ enum class EarthlyBranch(val label: String, val zodiac: String, val wuXing: WuXi
     val combine: EarthlyBranch get() = entries[((1 - ordinal) % 12 + 12) % 12]
 
     /**
+     * 六害（穿）。
+     *
+     * 无独立算术规律，但可由「合」与「冲」推出：**与我的六合者相冲的那个，就是害我的**。
+     * 自检：子→未、丑→午、寅→巳、卯→辰、申→亥、酉→戌，与传世口诀一致。
+     */
+    val harm: EarthlyBranch get() = combine.clash
+
+    /**
      * 三合局的另外两支（本支 → 下一个 → 再下一个，步长 4）。
      * 申子辰（水）、亥卯未（木）、寅午戌（火）、巳酉丑（金）。
      */

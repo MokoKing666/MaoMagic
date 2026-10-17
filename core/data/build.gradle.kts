@@ -24,6 +24,7 @@ android {
 
 dependencies {
     api(project(":core:model"))
+    api(project(":core:fortune"))
 
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.kotlinx.coroutines.android)
