@@ -1,6 +1,7 @@
 package com.maohongyuan.magic.core.ai
 
 import android.content.Context
+import android.util.Log
 import com.maohongyuan.magic.core.interpret.DivinationInterpreter
 import com.maohongyuan.magic.core.interpret.EngineTier
 import com.maohongyuan.magic.core.interpret.Interpretation
@@ -73,9 +74,18 @@ class OnDeviceInterpreter(
          * 降级链会自动跳过它 —— 不需要调用方判断。
          */
         fun fromDevice(context: Context): OnDeviceInterpreter {
-            val model = LocalModel.candidatesFor(DeviceProfile.current()).first()
-            val file = File(ModelDownloader.modelDir(context.filesDir), model.fileName)
-            return if (file.exists()) {
+            val device = DeviceProfile.current()
+            val model = LocalModel.candidatesFor(device).first()
+            val dir = ModelDownloader.modelDir(context.filesDir)
+            val file = File(dir, model.fileName)
+            val exists = file.exists()
+            Log.i(
+                "MaoMagicLLM",
+                "fromDevice: soc=${device.socModel}/${device.socManufacturer} " +
+                    "pick=${model.label} path=${file.absolutePath} exists=$exists " +
+                    "len=${if (exists) file.length() else -1}",
+            )
+            return if (exists) {
                 OnDeviceInterpreter(LiteRtLmBackend(context.applicationContext, file))
             } else {
                 OnDeviceInterpreter(null)
