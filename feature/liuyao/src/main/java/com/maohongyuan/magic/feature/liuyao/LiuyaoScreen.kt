@@ -334,8 +334,8 @@ private fun CoinFace(angle: Float, isZi: Boolean, thrown: Boolean, tint: Color, 
         Text(
             text = when {
                 !thrown -> "?"
-                showingZi -> "字"
-                else -> "背"
+                showingZi -> "正"
+                else -> "反"
             },
             fontSize = MagicType.caption.sp,
             fontWeight = FontWeight.Medium,
@@ -366,6 +366,15 @@ private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
         }
 
         // 未摇时不预设结果：显示「?」，否则三枚都显示「字」会让人以为已经出结果了
+        Spacer(Modifier.height(MagicSpacing.md))
+        Text(
+            text = "来杯好茶摇一爻",
+            fontSize = MagicType.subheadline.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (throws.size >= 6) colors.tertiaryText else colors.accent,
+        )
+        Spacer(Modifier.height(MagicSpacing.md))
+
         val lastCoins: List<Int>? = throws.lastOrNull()?.coins
         Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.md)) {
             repeat(3) { i ->
@@ -383,7 +392,7 @@ private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
         Text("三枚铜钱，摇六次成卦", fontSize = MagicType.subheadline.sp, color = colors.secondaryText)
         Spacer(Modifier.height(MagicSpacing.xs))
         Text(
-            text = "正面（字）记 3、反面（背）记 2；6 老阴、7 少阳、8 少阴、9 老阳",
+            text = "正面记 3、反面记 2；6 老阴、7 少阳、8 少阴、9 老阳",
             fontSize = MagicType.caption.sp,
             color = colors.tertiaryText,
         )
@@ -413,7 +422,7 @@ private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
                         modifier = Modifier.width(24.dp),
                     )
                     Text(
-                        text = t.coins.joinToString(" ") { if (it == 3) "字" else "背" },
+                        text = t.coins.joinToString(" ") { if (it == 3) "正" else "反" },
                         fontSize = MagicType.caption.sp,
                         color = colors.secondaryText,
                         modifier = Modifier.width(72.dp),
