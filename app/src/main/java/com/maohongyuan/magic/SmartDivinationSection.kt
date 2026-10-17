@@ -27,6 +27,7 @@ import com.maohongyuan.magic.designsystem.glass.MagicLabel
 import com.maohongyuan.magic.designsystem.theme.MagicSpacing
 import com.maohongyuan.magic.designsystem.theme.MagicType
 import com.maohongyuan.magic.designsystem.glass.MagicCaption
+import com.maohongyuan.magic.designsystem.glass.MagicSegmentedControl
 import com.maohongyuan.magic.designsystem.theme.LocalMagicColors
 import kotlinx.coroutines.launch
 
@@ -47,9 +48,15 @@ internal fun SmartDivinationSection() {
 
     val device = remember { DeviceProfile.current() }
     val model = remember { LocalModel.candidatesFor(device).first() }
-    val downloader = remember { ModelDownloader() }
+    // 分片数可调：不同网络下最优值不同。
+    // 4 是默认；CDN 单连接限速时加到 8 有用，弱网下减到 2 更稳。
+    var segments by remember { mutableStateOf(4) }
+    val downloader = remember(segments) { ModelDownloader(segments = segments) }
     val dir = remember { ModelDownloader.modelDir(context.filesDir) }
-    val installed = remember { downloader.installed(dir, model) }
+    // 删除后要让 installed 失效 —— 用这个计数触发重组。
+    // 必须声明在 installed 之前，否则作用域不对。
+    var generation by remember { mutableStateOf(0) }
+    val installed = remember(generation, segments) { downloader.installed(dir, model) }
 
     var state by remember { mutableStateOf<String>("") }
     var progress by remember { mutableStateOf<Float?>(null) }
@@ -74,13 +81,58 @@ internal fun SmartDivinationSection() {
     )
     Spacer(Modifier.height(MagicSpacing.row))
 
-    when {
-        installed != null -> Text(
-            text = "已下载，可直接使用",
-            fontSize = MagicType.footnote.sp,
-            color = colors.accent,
-            fontWeight = FontWeight.Medium,
+    // 下载中不让改，避免旧协程拿着旧分片数继续跑
+    if (installed == null && !busy) {
+        MagicSegmentedControl(
+            options = listOf("2 线程", "4 线程", "8 线程"),
+            selectedIndex = when (segments) {
+                2 -> 0
+                8 -> 2
+                else -> 1
+            },
+            onSelect = {
+                segments = when (it) {
+                    0 -> 2
+                    2 -> 8
+                    else -> 4
+                }
+            },
         )
+        Spacer(Modifier.height(MagicSpacing.xs))
+        MagicCaption("线程越多不一定越快 —— 取决于 CDN 是否按连接限速。慢了就换一档试试。")
+        Spacer(Modifier.height(MagicSpacing.row))
+    }
+
+    when {
+        installed != null -> Column {
+            Text(
+                text = "已下载，可直接使用",
+                fontSize = MagicType.footnote.sp,
+                color = colors.accent,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(Modifier.height(MagicSpacing.xs))
+            // 1.9 GB 不是小数目，得让用户能自己清掉
+            Text(
+                text = "删除模型（释放 ${installed.length() / 1048576} MB）",
+                fontSize = MagicType.footnote.sp,
+                color = colors.tertiaryText,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        if (installed.delete()) {
+                            state = "已删除"
+                            generation++
+                        } else {
+                            state = "删除失败"
+                        }
+                    }
+                    .padding(vertical = 4.dp),
+            )
+            if (state.isNotBlank()) {
+                Text(state, fontSize = MagicType.footnote.sp, color = colors.tertiaryText)
+            }
+        }
 
         busy -> Column {
             val p = progress

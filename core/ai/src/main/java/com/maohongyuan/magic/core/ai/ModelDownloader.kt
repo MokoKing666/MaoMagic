@@ -4,8 +4,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.buffer
+import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.flowOn
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -55,22 +57,22 @@ class ModelDownloader(
      * 已存在且大小正确的文件直接返回 [DownloadState.Done]，不重复下。
      * 存在侧车文件则从各分片断点续传。
      */
-    fun download(model: LocalModel, dir: File): Flow<DownloadState> = flow {
+    fun download(model: LocalModel, dir: File): Flow<DownloadState> = channelFlow {
         val target = File(dir, model.fileName)
         if (target.exists() && target.length() == model.sizeBytes) {
-            emit(DownloadState.Done(target))
-            return@flow
+            send(DownloadState.Done(target))
+            return@channelFlow
         }
 
         if (!dir.exists() && !dir.mkdirs()) {
-            emit(DownloadState.Failed("无法创建目录：${dir.absolutePath}"))
-            return@flow
+            send(DownloadState.Failed("无法创建目录：${dir.absolutePath}"))
+            return@channelFlow
         }
 
         val total = model.sizeBytes
         if (total <= 0) {
-            emit(DownloadState.Failed("模型大小未登记，无法分片下载"))
-            return@flow
+            send(DownloadState.Failed("模型大小未登记，无法分片下载"))
+            return@channelFlow
         }
 
         val part = File(dir, "${model.fileName}.part")
@@ -85,34 +87,42 @@ class ModelDownloader(
         val segRanges = split(total)
         val done = readSidecar(sidecar, segRanges.size)
 
-        emit(DownloadState.Progress(done.sum(), total))
+        send(DownloadState.Progress(done.sum(), total))
 
+        // 分片线程里每写一块就往外推一次进度。
+        // 用 trySend 而不是 send：从 IO 线程发，不能挂起；
+        // 配合 conflated 缓冲，中间值自动丢弃，不会积压三万条消息。
         val ok = coroutineScope {
             segRanges.mapIndexed { i, range ->
                 async(Dispatchers.IO) {
                     if (done[i] >= range.len) return@async true
-                    fetchSegment(model, part, range, i, done[i], sidecar, done)
+                    fetchSegment(model, part, range, i, done[i], sidecar, done) {
+                        trySend(DownloadState.Progress(done.sum(), total))
+                    }
                 }
             }.awaitAll()
         }
 
         if (ok.any { !it }) {
-            emit(DownloadState.Failed("部分分片下载失败，已保留进度，可重试"))
-            return@flow
+            send(DownloadState.Failed("部分分片下载失败，已保留进度，可重试"))
+            return@channelFlow
         }
 
         if (part.length() != total) {
-            emit(DownloadState.Failed("大小不符：期望 $total，实际 ${part.length()}"))
-            return@flow
+            send(DownloadState.Failed("大小不符：期望 $total，实际 ${part.length()}"))
+            return@channelFlow
         }
 
         sidecar.delete()
         if (!part.renameTo(target)) {
-            emit(DownloadState.Failed("重命名失败：${part.absolutePath}"))
-            return@flow
+            send(DownloadState.Failed("重命名失败：${part.absolutePath}"))
+            return@channelFlow
         }
-        emit(DownloadState.Done(target))
-    }.flowOn(Dispatchers.IO)
+        send(DownloadState.Done(target))
+    }.buffer(
+        capacity = 64,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST,
+    ).flowOn(Dispatchers.IO)
 
     /** 下载一个分片。返回是否成功 */
     private fun fetchSegment(
@@ -123,6 +133,7 @@ class ModelDownloader(
         alreadyDone: Long,
         sidecar: File,
         done: LongArray,
+        onProgress: () -> Unit,
     ): Boolean {
         val start = range.first + alreadyDone
         if (start > range.last) return true
@@ -150,6 +161,7 @@ class ModelDownloader(
                         pos += n
                         done[index] = pos - range.first
                         writeSidecar(sidecar, done)
+                        onProgress()
                     }
                 }
             }
