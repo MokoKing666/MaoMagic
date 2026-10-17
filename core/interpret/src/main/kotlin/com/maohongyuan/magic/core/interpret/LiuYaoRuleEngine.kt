@@ -43,7 +43,10 @@ enum class QuestionCategory(val label: String, val yongShen: LiuQin?) {
                 "疾病", "健康", "身体", "手术", "痊愈", "生病", "病情", "康复", "医",
             ),
             MARRIAGE to listOf(
-                "婚姻", "感情", "对象", "恋爱", "姻缘", "复合", "分手", "配偶", "结婚", "脱单",
+                "婚姻", "感情", "情感", "爱情", "对象", "恋爱", "姻缘", "复合", "分手",
+                "配偶", "结婚", "脱单", "喜欢", "表白", "相亲", "暧昧", "暗恋",
+                "前任", "复合", "和好", "吵架", "冷战", "老公", "老婆", "男友", "女友",
+                "男朋友", "女朋友", "伴侣", "夫妻", "婚姻",
             ),
             CHILDREN to listOf(
                 "子女", "孩子", "怀孕", "生育", "下属", "学生", "子嗣",
@@ -59,6 +62,7 @@ enum class QuestionCategory(val label: String, val yongShen: LiuQin?) {
             ),
             WEALTH to listOf(
                 "财", "钱", "生意", "投资", "买卖", "收入", "盈利", "亏损", "债", "股",
+                "财务", "工资", "薪资", "赚", "亏", "回本", "分红", "存钱", "理财",
             ),
         )
 
@@ -258,6 +262,11 @@ class LiuYaoRuleEngine : DivinationInterpreter {
 
         // 白话结论：把卦理翻成「这件事上你该注意什么」
         val advice = ADVICE[category] ?: ADVICE.getValue(QuestionCategory.GENERAL)
+        // 结论按维度说 —— 用户问的是一件事，但想知道的是「各方面怎么样」
+        val dimensions = DIMENSIONS.map { (liuQin, label, hint) ->
+            label to describeDimension(chart, liuQin, hint)
+        }
+
         val conclusion = buildString {
             append(headline)
             append("。")
@@ -365,6 +374,13 @@ class LiuYaoRuleEngine : DivinationInterpreter {
             }
             add(
                 InterpretationSection(
+                    title = "各方面",
+                    body = dimensions.joinToString("\n") { (label, text) -> "【$label】$text" },
+                    tone = Tone.NEUTRAL,
+                )
+            )
+            add(
+                InterpretationSection(
                     title = "结论",
                     body = conclusion,
                     tone = when (verdict) {
@@ -384,6 +400,30 @@ class LiuYaoRuleEngine : DivinationInterpreter {
             tier = EngineTier.RULE,
             yongShenNote = "$yongLabel · ${chart.palace.summary}",
         )
+    }
+
+    /**
+     * 分维度解读。
+     *
+     * 用户问的是一件事，但真正想知道的是「各方面怎么样」——
+     * 所以除了针对所问事类的用神分析，再按六亲给五个维度各一句话。
+     *
+     * ⚠️ 六爻古法讲「一事一占」，多问则卦不应。这里的分维度只是
+     * **从同一卦里读出各方面的气象**，不是另起五卦，也不该被当成五次占卜的结论。
+     */
+    private fun describeDimension(chart: LiuYaoChart, liuQin: LiuQin, hint: List<String>): String {
+        val lines = chart.linesOf(liuQin)
+        if (lines.isEmpty()) return "卦中不见，此事暂无着落。"
+        val line = lines.first()
+        val ws = WangShuai.of(line.naJia.wuXing, chart.monthBranch)
+        val kongNote = if (line.kong) "，又落旬空" else ""
+        val movingNote = if (line.moving) "，且在动" else ""
+        return "在${line.title}（${line.naJia.label}），${ws.label}$kongNote$movingNote —— " +
+            when (ws) {
+                WangShuai.WANG, WangShuai.XIANG -> hint[0]
+                WangShuai.XIU -> hint[1]
+                else -> hint[2]
+            }
     }
 
     /** 一个断卦因子。weight > 0 助成、< 0 阻成、= 0 中性 */
@@ -406,6 +446,35 @@ class LiuYaoRuleEngine : DivinationInterpreter {
             QuestionCategory.PEER to "与人合作宜守分寸，口头承诺要落到字面。",
             QuestionCategory.TRAVEL to "出行搬迁宜留退路，能推迟就推迟。",
             QuestionCategory.GENERAL to "宜先观察形势再动手，不必急于表态。",
+        )
+
+        /**
+         * 分维度表：六亲 → 维度名 → 三档断语（有力 / 平平 / 无力）。
+         *
+         * 断语只描述「气象」，不承诺结果 —— 与行动建议同理，
+         * 说「眼下有气」比说「一定会成」诚实。
+         */
+        val DIMENSIONS: List<Triple<LiuQin, String, List<String>>> = listOf(
+            Triple(
+                LiuQin.QI_CAI, "财运",
+                listOf("财有气，进项可期。", "财气平平，够用但难有大进。", "财气弱，宜守不宜投。"),
+            ),
+            Triple(
+                LiuQin.GUAN_GUI, "事业",
+                listOf("事业有气，利于推动。", "事业平稳，暂无大变动。", "事业受制，宜守成待时。"),
+            ),
+            Triple(
+                LiuQin.QI_CAI, "感情",
+                listOf("感情有气，彼此有意。", "感情平缓，需要主动经营。", "感情偏弱，易生疏离。"),
+            ),
+            Triple(
+                LiuQin.ZI_SUN, "身心",
+                listOf("子孙有气，身心舒泰。", "身心平常，注意作息。", "子孙无力，宜多休养。"),
+            ),
+            Triple(
+                LiuQin.FU_MU, "文书·长辈",
+                listOf("文书顺遂，长辈得力。", "文书平平，按流程走即可。", "文书易生波折，细看条款。"),
+            ),
         )
 
         /** 六神断语的常见取象，用于给结果补一句辅助说明。 */
