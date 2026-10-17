@@ -154,11 +154,15 @@ class OnDeviceInterpreter(
             val exists = file.isFile && file.length() == model.sizeBytes
             // OpenCL 探测：设备上有 /vendor/lib64/libOpenCL.so 且在 public.libraries 白名单，
             // 但 LiteRT-LM 仍报找不到。测一下应用命名空间能否加载，区分「设备没有」与「加载器找不到」。
+            // 必须记 message：UnsatisfiedLinkError 的消息才说明是「找不到库」
+            // 还是「缺符号 / 依赖缺失」，只看类名等于没查。
             val clByLib = runCatching { System.loadLibrary("OpenCL"); "成功" }
-                .getOrElse { "失败(${it.javaClass.simpleName})" }
-            val clByPath = runCatching { System.load("/vendor/lib64/libOpenCL.so"); "成功" }
-                .getOrElse { "失败(${it.javaClass.simpleName})" }
-            LlmLog.i("OpenCL 探测 → loadLibrary=$clByLib 绝对路径=$clByPath")
+                .getOrElse { "失败: ${it.message}" }
+            val nativeDir = context.applicationInfo.nativeLibraryDir
+            val clAbs = runCatching { System.load("$nativeDir/libOpenCL.so"); "成功" }
+                .getOrElse { "失败: ${it.message}" }
+            LlmLog.i("OpenCL 探测 → loadLibrary=$clByLib")
+            LlmLog.i("OpenCL 探测 → nativeLibraryDir($nativeDir) = $clAbs")
 
             LlmLog.i(
                 "fromDevice: soc=${device.socModel}/${device.socManufacturer} " +
