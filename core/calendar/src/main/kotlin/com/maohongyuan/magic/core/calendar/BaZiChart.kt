@@ -1,5 +1,8 @@
 package com.maohongyuan.magic.core.calendar
 
+import com.maohongyuan.magic.core.model.DivinationChart
+import com.maohongyuan.magic.core.model.DivinationSystem
+
 import com.maohongyuan.magic.core.model.EarthlyBranch
 import com.maohongyuan.magic.core.model.GanZhi
 import com.maohongyuan.magic.core.model.HeavenlyStem
@@ -76,7 +79,9 @@ data class BaZiChart(
     /** 大运顺行 / 逆行 */
     val forward: Boolean,
     val daYun: List<DaYunPeriod>,
-) {
+) : DivinationChart {
+    override val system: DivinationSystem = DivinationSystem.BA_ZI
+
     val pillars: List<Pillar> get() = listOf(year, month, day, hour)
 
     /** 命盘四柱，如「庚午 壬午 辛酉 壬辰」 */

@@ -134,7 +134,7 @@ fun MeihuaScreen(scrollState: ScrollState) {
             interpretation = chain.interpret(
                 InterpretationRequest(
                     question = question.ifBlank { "综合" },
-                    meihua = chartValue,
+                    chart = chartValue,
                     monthBranch = day.monthBranch,
                 )
             )

@@ -30,7 +30,7 @@ class MeihuaRuleEngine : DivinationInterpreter {
     override suspend fun isAvailable(): Boolean = true
 
     override fun interpret(request: InterpretationRequest): Flow<Interpretation> {
-        val chart = request.meihua ?: return flowOf()
+        val chart = request.chart as? MeihuaChart ?: return flowOf()
         return flowOf(analyze(chart, request.monthBranch))
     }
 
@@ -198,7 +198,7 @@ class BaZiRuleEngine : DivinationInterpreter {
     override suspend fun isAvailable(): Boolean = true
 
     override fun interpret(request: InterpretationRequest): Flow<Interpretation> {
-        val chart = request.bazi ?: return flowOf()
+        val chart = request.chart as? BaZiChart ?: return flowOf()
         return flowOf(analyze(chart))
     }
 

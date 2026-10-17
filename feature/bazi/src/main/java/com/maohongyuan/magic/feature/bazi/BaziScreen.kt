@@ -108,7 +108,7 @@ fun BaziScreen(scrollState: ScrollState) {
         if (c != null) {
             scope.launch {
                 interpretation = BaZiRuleEngine().interpret(
-                    InterpretationRequest("看命盘", bazi = c)
+                    InterpretationRequest("看命盘", chart = c)
                 ).firstOrNull()
             }
         }

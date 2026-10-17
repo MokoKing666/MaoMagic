@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -121,7 +122,7 @@ class RuleEngineTest {
         val result = engine.interpret(
             InterpretationRequest(
                 question = "今年事业运势如何",
-                liuYao = liuYaoChart("天风姤", setOf(3)),
+                chart = liuYaoChart("天风姤", setOf(3)),
             )
         ).firstOrNull()
 
@@ -141,7 +142,7 @@ class RuleEngineTest {
     @Test
     fun `六爻引擎对静卦也能出结论`() = runBlocking {
         val result = LiuYaoRuleEngine().interpret(
-            InterpretationRequest("随便问问", liuYao = liuYaoChart("乾为天"))
+            InterpretationRequest("随便问问", chart = liuYaoChart("乾为天"))
         ).firstOrNull()
         assertNotNull(result)
         assertTrue(result!!.sections.any { it.body.contains("静卦") })
@@ -151,7 +152,7 @@ class RuleEngineTest {
     fun `六爻引擎用神不上卦时取伏神`() = runBlocking {
         // 天风姤缺妻财，问财运应取伏神
         val result = LiuYaoRuleEngine().interpret(
-            InterpretationRequest("今年财运如何", liuYao = liuYaoChart("天风姤"))
+            InterpretationRequest("今年财运如何", chart = liuYaoChart("天风姤"))
         ).firstOrNull()!!
         assertTrue(result.sections.any { it.body.contains("伏神") })
     }
@@ -160,7 +161,7 @@ class RuleEngineTest {
     fun `六爻引擎收到梅花请求时返回空`() = runBlocking {
         val meihua = MeihuaDivination.byNumber(1, 2)
         val result = LiuYaoRuleEngine().interpret(
-            InterpretationRequest("测试", meihua = meihua)
+            InterpretationRequest("测试", chart = meihua)
         ).firstOrNull()
         assertEquals(null, result)
     }
@@ -170,7 +171,7 @@ class RuleEngineTest {
         val result = MeihuaRuleEngine().interpret(
             InterpretationRequest(
                 question = "此事可行否",
-                meihua = MeihuaDivination.chart(Hexagram.byName("泽火革")!!, 3),
+                chart = MeihuaDivination.chart(Hexagram.byName("泽火革")!!, 3),
                 monthBranch = EarthlyBranch.XU,
             )
         ).firstOrNull()!!
@@ -187,7 +188,7 @@ class RuleEngineTest {
         val result = MeihuaRuleEngine().interpret(
             InterpretationRequest(
                 question = "测试",
-                meihua = MeihuaDivination.chart(Hexagram.byName("泽火革")!!, 3),
+                chart = MeihuaDivination.chart(Hexagram.byName("泽火革")!!, 3),
                 monthBranch = null,
             )
         ).firstOrNull()!!
@@ -198,7 +199,7 @@ class RuleEngineTest {
     fun `八字引擎只做客观陈述不做格局推断`() = runBlocking {
         val chart = BaZiService.chart(1990, 6, 15, 12, gender = Gender.MALE)
         val result = BaZiRuleEngine().interpret(
-            InterpretationRequest("看下命盘", bazi = chart)
+            InterpretationRequest("看下命盘", chart = chart)
         ).firstOrNull()!!
 
         assertEquals(EngineTier.RULE, result.tier)
@@ -208,19 +209,25 @@ class RuleEngineTest {
     }
 
     @Test
-    fun `请求必须且只能带一个盘`() {
-        // 带两个盘应报错
-        runCatching {
-            InterpretationRequest(
-                "测试",
-                liuYao = liuYaoChart("乾为天"),
-                meihua = MeihuaDivination.byNumber(1, 2),
-            )
-        }.onSuccess { error("应当抛异常") }
+    fun `引擎收到处理不了的盘时返回空流而不是崩`() = runBlocking {
+        // 这是改造后的关键契约：引擎用 `as?` 取盘，取不到就 emit 空流，
+        // 由 InterpreterChain 继续降级。绝不能抛异常 ——
+        // 否则一个引擎的不匹配会打断整条链。
+        val meihua = MeihuaDivination.byNumber(1, 2)
+        val liuYao = liuYaoChart("乾为天")
 
-        // 不带盘也应报错
-        runCatching { InterpretationRequest("测试") }
-            .onSuccess { error("应当抛异常") }
+        assertNull(
+            "六爻引擎不该处理梅花盘",
+            LiuYaoRuleEngine().interpret(InterpretationRequest("测试", chart = meihua)).firstOrNull(),
+        )
+        assertNull(
+            "梅花引擎不该处理六爻盘",
+            MeihuaRuleEngine().interpret(InterpretationRequest("测试", chart = liuYao)).firstOrNull(),
+        )
+        assertNull(
+            "八字引擎不该处理六爻盘",
+            BaZiRuleEngine().interpret(InterpretationRequest("测试", chart = liuYao)).firstOrNull(),
+        )
     }
 }
 
@@ -261,7 +268,7 @@ class InterpreterChainTest {
         val result = chain.interpret(
             InterpretationRequest(
                 "测试",
-                liuYao = LiuYaoDivination.chart(
+                chart = LiuYaoDivination.chart(
                     Hexagram.byName("乾为天")!!,
                     GanZhi(0),
                     EarthlyBranch.XU,

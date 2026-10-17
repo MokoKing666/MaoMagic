@@ -1,5 +1,8 @@
 package com.maohongyuan.magic.core.hexagram
 
+import com.maohongyuan.magic.core.model.DivinationChart
+import com.maohongyuan.magic.core.model.DivinationSystem
+
 import com.maohongyuan.magic.core.model.Hexagram
 import com.maohongyuan.magic.core.model.Trigram
 import com.maohongyuan.magic.core.model.WuXing
@@ -35,7 +38,9 @@ data class MeihuaChart(
     val changed: Hexagram,
     /** 动爻位置，0 = 初爻 */
     val movingIndex: Int,
-) {
+) : DivinationChart {
+    override val system: DivinationSystem = DivinationSystem.MEI_HUA
+
     /** 体卦（不动的那一卦） */
     val tiTrigram: Trigram
         get() = if (movingIndex < 3) original.upper else original.lower

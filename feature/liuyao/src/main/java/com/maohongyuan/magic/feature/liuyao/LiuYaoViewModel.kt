@@ -264,7 +264,7 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
                 chain.interpret(
                     InterpretationRequest(
                         question = state.question.ifBlank { "综合" },
-                        liuYao = chart,
+                        chart = chart,
                     )
                 )
             }.getOrNull()

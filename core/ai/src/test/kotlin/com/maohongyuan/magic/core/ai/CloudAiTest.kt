@@ -69,7 +69,7 @@ class CloudAiTest {
             movingIndexes = setOf(2),
             question = "这次面试能过吗",
         )
-        val text = ChartPrompt.userMessage(InterpretationRequest("这次面试能过吗", liuYao = chart))
+        val text = ChartPrompt.userMessage(InterpretationRequest("这次面试能过吗", chart = chart))
 
         // 所问必须原样带上 —— 用神取错，整卦就断偏了
         assertTrue(text.contains("这次面试能过吗"))
@@ -104,7 +104,7 @@ class CloudAiTest {
             movingIndexes = emptySet(),
             question = "静卦测试",
         )
-        val text = ChartPrompt.userMessage(InterpretationRequest("静卦测试", liuYao = chart))
+        val text = ChartPrompt.userMessage(InterpretationRequest("静卦测试", chart = chart))
         assertFalse("无动爻时不应出现变爻", text.contains("变爻："))
         assertFalse(text.contains("·动"))
     }
@@ -115,7 +115,7 @@ class CloudAiTest {
     fun `梅花提示词包含三卦与体用`() {
         val chart = MeihuaDivination.chart(Hexagram.of(39), 2)
         val text = ChartPrompt.userMessage(
-            InterpretationRequest("梅花测试", meihua = chart, monthBranch = EarthlyBranch.XU)
+            InterpretationRequest("梅花测试", chart = chart, monthBranch = EarthlyBranch.XU)
         )
         assertTrue(text.contains(chart.original.name))
         assertTrue(text.contains(chart.nuclear.name))
@@ -133,7 +133,7 @@ class CloudAiTest {
     @Test
     fun `八字提示词包含四柱与十神`() {
         val chart = BaZiService.chart(1990, 6, 15, 12, gender = Gender.MALE)
-        val text = ChartPrompt.userMessage(InterpretationRequest("看命盘", bazi = chart))
+        val text = ChartPrompt.userMessage(InterpretationRequest("看命盘", chart = chart))
 
         assertTrue(text.contains("年柱"))
         assertTrue(text.contains("月柱"))
@@ -151,7 +151,7 @@ class CloudAiTest {
     @Test
     fun `所问为空时有兜底且不崩`() {
         val chart = MeihuaDivination.chart(Hexagram.of(1), 0)
-        val text = ChartPrompt.userMessage(InterpretationRequest("", meihua = chart))
+        val text = ChartPrompt.userMessage(InterpretationRequest("", chart = chart))
         assertTrue(text.contains("未填写"))
         assertTrue(text.isNotBlank())
     }

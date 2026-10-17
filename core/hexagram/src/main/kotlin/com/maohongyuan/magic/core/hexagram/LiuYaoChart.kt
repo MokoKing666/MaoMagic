@@ -1,5 +1,8 @@
 package com.maohongyuan.magic.core.hexagram
 
+import com.maohongyuan.magic.core.model.DivinationChart
+import com.maohongyuan.magic.core.model.DivinationSystem
+
 import com.maohongyuan.magic.core.model.EarthlyBranch
 import com.maohongyuan.magic.core.model.GanZhi
 import com.maohongyuan.magic.core.model.Hexagram
@@ -135,7 +138,9 @@ data class LiuYaoChart(
     val dayGanZhi: GanZhi,
     val xunKong: XunKong,
     val question: String,
-) {
+) : DivinationChart {
+    override val system: DivinationSystem = DivinationSystem.LIU_YAO
+
     val movingIndexes: List<Int> get() = lines.filter { it.moving }.map { it.index }
 
     val shiLine: LiuYaoLine get() = lines.first { it.relation == YaoRelation.SHI }

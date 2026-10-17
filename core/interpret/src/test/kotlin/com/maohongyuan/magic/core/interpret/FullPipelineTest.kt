@@ -93,7 +93,7 @@ class FullPipelineTest {
                 val result = engine.interpret(
                     InterpretationRequest(
                         question = "事业财运婚姻疾病综合测试",
-                        liuYao = chart,
+                        chart = chart,
                     )
                 ).firstOrNull()
                 assertNotNull("${hex.name} $moving 应产出解卦结果", result)
@@ -139,7 +139,7 @@ class FullPipelineTest {
                 val result = engine.interpret(
                     InterpretationRequest(
                         question = "综合测试",
-                        meihua = chart,
+                        chart = chart,
                         monthBranch = monthBranch,
                     )
                 ).firstOrNull()
@@ -174,7 +174,7 @@ class FullPipelineTest {
                         }
 
                         val result = engine.interpret(
-                            InterpretationRequest("看命盘", bazi = chart)
+                            InterpretationRequest("看命盘", chart = chart)
                         ).firstOrNull()
                         assertNotNull(result)
                         assertTrue(result!!.headline.contains("日主"))

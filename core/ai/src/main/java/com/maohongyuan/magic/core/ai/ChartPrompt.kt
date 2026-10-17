@@ -57,9 +57,20 @@ sections 给 4-6 段，覆盖：用神/核心判断、旺衰或结构、动变�
         appendLine(request.question.ifBlank { "（未填写，请按综合运势论断）" })
         appendLine()
 
-        request.liuYao?.let { append(liuYao(it)) }
-        request.meihua?.let { append(meihua(it, request)) }
-        request.bazi?.let { append(bazi(it)) }
+        // 按盘的类型分派。用 `when` + `else` 而不是 sealed ——
+        // 各盘分散在不同模块，跨模块无法 sealed（见 DivinationChart 注释）。
+        // 新增系统时在这里加一个分支即可，未加的系统会走 else 输出系统名，
+        // 模型仍能凭所问作答，不会崩。
+        when (val chart = request.chart) {
+            is LiuYaoChart -> append(liuYao(chart))
+            is MeihuaChart -> append(meihua(chart, request))
+            is BaZiChart -> append(bazi(chart))
+            else -> {
+                appendLine("【排盘】${chart.system.label}")
+                appendLine("（该系统暂未提供结构化排盘，请依据所问与常识作答。）")
+                appendLine()
+            }
+        }
 
         appendLine()
         append("请按系统要求输出 JSON。")

@@ -1,5 +1,7 @@
 package com.maohongyuan.magic.core.interpret
 
+import com.maohongyuan.magic.core.model.DivinationChart
+
 /**
  * 解卦引擎档位。
  *
@@ -75,9 +77,14 @@ data class Interpretation(
 data class InterpretationRequest(
     /** 所问何事。**越具体，断卦越有针对性** */
     val question: String,
-    val liuYao: com.maohongyuan.magic.core.hexagram.LiuYaoChart? = null,
-    val meihua: com.maohongyuan.magic.core.hexagram.MeihuaChart? = null,
-    val bazi: com.maohongyuan.magic.core.calendar.BaZiChart? = null,
+    /**
+     * 要解读的盘。**唯一**，不再三选一。
+     *
+     * 早期用 `liuYao?/meihua?/bazi?` 三个可空字段加 `require(恰好 1 个)`，
+     * 每新增一个术数系统都要改这个约束 —— 扩到 12 个系统时不可维护。
+     * 现改为统一的 [DivinationChart] 标记接口，各引擎自行 `as?` 判断能否处理。
+     */
+    val chart: DivinationChart,
     /**
      * 月建地支。
      *
@@ -85,10 +92,4 @@ data class InterpretationRequest(
      * 引擎会跳过旺衰部分并在结果里说明。
      */
     val monthBranch: com.maohongyuan.magic.core.model.EarthlyBranch? = null,
-) {
-    init {
-        require(listOfNotNull(liuYao, meihua, bazi).size == 1) {
-            "一次只能解一个盘，实际收到 ${listOfNotNull(liuYao, meihua, bazi).size} 个"
-        }
-    }
-}
+)

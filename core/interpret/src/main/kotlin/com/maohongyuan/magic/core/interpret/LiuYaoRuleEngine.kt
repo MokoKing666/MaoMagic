@@ -93,7 +93,7 @@ class LiuYaoRuleEngine : DivinationInterpreter {
     override suspend fun isAvailable(): Boolean = true
 
     override fun interpret(request: InterpretationRequest): Flow<Interpretation> {
-        val chart = request.liuYao ?: return flowOf()
+        val chart = request.chart as? LiuYaoChart ?: return flowOf()
         return flowOf(analyze(request.question, chart))
     }
 
