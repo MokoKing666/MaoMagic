@@ -99,12 +99,15 @@ class LiuYaoRuleEngine : DivinationInterpreter {
 
     private fun analyze(question: String, chart: LiuYaoChart): Interpretation {
         val category = QuestionCategory.detect(question)
-        val notes = mutableListOf<Pair<String, Tone>>()
+        // 每个因子带权重：正数助成、负数阻成、零为中性补充。
+        // 分开存是为了输出时能分成「有利 / 不利」两栏 —— 之前全塞一个分号串里，
+        // 用户读到的是一堆并列的术语，看不出哪条在帮忙、哪条在拖后腿。
+        val factors = mutableListOf<Factor>()
         var score = 0
 
         fun add(delta: Int, text: String, tone: Tone) {
             score += delta
-            notes += text to tone
+            factors += Factor(delta, text, tone)
         }
 
         // ── 1. 定用神 ──
@@ -139,10 +142,12 @@ class LiuYaoRuleEngine : DivinationInterpreter {
             else -> "${yongLine?.title ?: "—"}（$yongLabel）"
         }
 
-        notes += (
+        factors += Factor(
+            0,
             "所问事类判为「${category.label}」，用神取 $yongLabel" +
-                if (viaFuShen) "（不上卦，取伏神）" else "（${yongLine?.naJia?.label ?: ""}）"
-            ) to Tone.NEUTRAL
+                if (viaFuShen) "（不上卦，取伏神）" else "（${yongLine?.naJia?.label ?: ""}）",
+            Tone.NEUTRAL,
+        )
 
         if (viaFuShen) {
             add(-1, "用神伏藏不现，主事情隐晦难显，需待日月生扶方可出头", Tone.WARNING)
@@ -183,7 +188,7 @@ class LiuYaoRuleEngine : DivinationInterpreter {
         // ── 4 & 5. 动爻与变爻 ──
         val moving = chart.lines.filter { it.moving }
         if (moving.isEmpty()) {
-            notes += "卦中无动爻，为静卦 —— 事情维持现状，无甚变数" to Tone.NEUTRAL
+            factors += Factor(0, "卦中无动爻，为静卦 —— 事情维持现状，无甚变数", Tone.NEUTRAL)
         } else {
             moving.forEach { line ->
                 when (WuXingRelation.between(line.naJia.wuXing, yongWuXing)) {
@@ -239,24 +244,73 @@ class LiuYaoRuleEngine : DivinationInterpreter {
         }
 
         val headline = when (verdict) {
-            Verdict.AUSPICIOUS -> "用神有力，事可成，宜进"
-            Verdict.INAUSPICIOUS -> "用神受制，事难成，宜守"
-            Verdict.NEUTRAL -> "吉凶相抵，事在人为"
-            Verdict.MIXED -> if (score > 0) "吉中带阻，可成但需费力" else "凶中有救，尚可转圜"
+            Verdict.AUSPICIOUS -> "事可为 —— 用神有力，阻碍不多"
+            Verdict.INAUSPICIOUS -> "此事难成 —— 用神受制，宜缓不宜急"
+            Verdict.NEUTRAL -> "吉凶参半 —— 成与不成，多半看你怎么做"
+            Verdict.MIXED ->
+                if (score > 0) "能成，但要费些力气 —— 有助力也有牵绊"
+                else "眼下不顺，但有转机 —— 别急着放弃"
+        }
+
+        val helpful = factors.filter { it.weight > 0 }
+        val harmful = factors.filter { it.weight < 0 }
+        val neutral = factors.filter { it.weight == 0 }
+
+        // 白话结论：把卦理翻成「这件事上你该注意什么」
+        val advice = ADVICE[category] ?: ADVICE.getValue(QuestionCategory.GENERAL)
+        val conclusion = buildString {
+            append(headline)
+            append("。")
+            append(
+                when (verdict) {
+                    Verdict.AUSPICIOUS -> "眼下是顺的，该推进就推进。"
+                    Verdict.INAUSPICIOUS -> "眼下阻力大于助力，先别硬推 —— 缓一缓、换个时机再说。"
+                    Verdict.NEUTRAL -> "没有明显推力也没有明显阻力，结果取决于你的做法。"
+                    Verdict.MIXED -> "有助力也有牵绊，关键是把牵绊那条先处理掉。"
+                }
+            )
+            if (verdict != Verdict.AUSPICIOUS) append(advice)
+            // 应期提示：旬空与静卦最能说明「什么时候」
+            if (yongLine != null && yongLine.kong) {
+                append("用神落旬空（${chart.xunKong.label}），事多虚而不实；要等出空之后才见分晓。")
+            }
+            if (chart.lines.none { it.moving }) {
+                append("卦中无动爻，事态维持现状，短期内不会有大的变化。")
+            }
         }
 
         val sections = buildList {
             add(
                 InterpretationSection(
                     title = "用神",
-                    body = "所问「${category.label}」，以 $yongLabel 为用神，取 $yongTitle。",
+                    body = buildString {
+                        append("你问的是「${category.label}」这类事，按六爻的取法，看 $yongLabel。")
+                        append("\n")
+                        append(
+                            if (viaFuShen) {
+                                "$yongLabel 没有上卦，只能从伏神里找 —— 事不明朗，需待时机。"
+                            } else {
+                                "$yongLabel 落在${yongLine?.title ?: "—"}（${yongLine?.naJia?.label ?: ""}）。"
+                            }
+                        )
+                        append("\n")
+                        append("六神临${yongLine?.liuShen?.label ?: "—"}：")
+                        append(LIU_SHEN_HINT[yongLine?.liuShen] ?: "无特别取象。")
+                    },
                     tone = Tone.NEUTRAL,
                 )
             )
             add(
                 InterpretationSection(
                     title = "旺衰",
-                    body = "用神属${yongWuXing}，生于${chart.monthBranch.label}月，处「${wangShuai.label}」。",
+                    body = "$yongLabel 属${yongWuXing}，生于${chart.monthBranch.label}月，处「${wangShuai.label}」。" +
+                        when (wangShuai) {
+                            WangShuai.WANG -> "月令正旺，它自己就有底气 —— 这是最有力的一档。"
+                            WangShuai.XIANG -> "得月令所生，气是够的，虽不如当令那么强。"
+                            WangShuai.XIU -> "月令不生不克，气平 —— 不算强，但也没被压。"
+                            WangShuai.QIU -> "月令克它，气偏弱 —— 想成事得靠别处补。"
+                            WangShuai.SI -> "月令克得最狠，气衰 —— 单靠它自己撑不起来。"
+                        },
                     tone = when (wangShuai) {
                         WangShuai.WANG, WangShuai.XIANG -> Tone.POSITIVE
                         WangShuai.XIU -> Tone.NEUTRAL
@@ -264,26 +318,55 @@ class LiuYaoRuleEngine : DivinationInterpreter {
                     },
                 )
             )
+            if (helpful.isNotEmpty()) {
+                add(
+                    InterpretationSection(
+                        title = "有利的一面",
+                        body = helpful.joinToString("\n") { "· ${it.text}" },
+                        tone = Tone.POSITIVE,
+                    )
+                )
+            }
+            if (harmful.isNotEmpty()) {
+                add(
+                    InterpretationSection(
+                        title = "不利的一面",
+                        body = harmful.joinToString("\n") { "· ${it.text}" },
+                        tone = Tone.NEGATIVE,
+                    )
+                )
+            }
+            if (helpful.isEmpty() && harmful.isEmpty()) {
+                add(
+                    InterpretationSection(
+                        title = "卦象",
+                        body = "这一卦没有明显的生扶，也没有明显的克伤 —— 事态平稳，看不出强信号。",
+                        tone = Tone.NEUTRAL,
+                    )
+                )
+            }
             add(
                 InterpretationSection(
                     title = "世应",
-                    body = "世爻${shi.title}（${shi.liuQin.label}${shi.naJia.label}），" +
-                        "应爻${chart.yingLine.title}（${chart.yingLine.liuQin.label}${chart.yingLine.naJia.label}）。" +
+                    body = "世爻${shi.title}（${shi.liuQin.label}${shi.naJia.label}）代表你自己，" +
+                        "应爻${chart.yingLine.title}（${chart.yingLine.liuQin.label}${chart.yingLine.naJia.label}）代表对方或外部。" +
                         "${chart.palace.summary}。",
                     tone = Tone.NEUTRAL,
                 )
             )
-            add(
-                InterpretationSection(
-                    title = "六神",
-                    body = "用神临${yongLine?.liuShen?.label ?: "—"}。" + LIU_SHEN_HINT[yongLine?.liuShen],
-                    tone = Tone.NEUTRAL,
+            if (neutral.isNotEmpty()) {
+                add(
+                    InterpretationSection(
+                        title = "补充",
+                        body = neutral.joinToString("\n") { "· ${it.text}" },
+                        tone = Tone.NEUTRAL,
+                    )
                 )
-            )
+            }
             add(
                 InterpretationSection(
-                    title = "综合",
-                    body = notes.joinToString("；") { it.first } + "。",
+                    title = "结论",
+                    body = conclusion,
                     tone = when (verdict) {
                         Verdict.AUSPICIOUS -> Tone.POSITIVE
                         Verdict.INAUSPICIOUS -> Tone.NEGATIVE
@@ -303,7 +386,28 @@ class LiuYaoRuleEngine : DivinationInterpreter {
         )
     }
 
+    /** 一个断卦因子。weight > 0 助成、< 0 阻成、= 0 中性 */
+    private data class Factor(val weight: Int, val text: String, val tone: Tone)
+
     private companion object {
+        /**
+         * 各类事的行动建议。
+         *
+         * 只给「该怎么做」，不给「会不会成」—— 会不会成由卦决定，
+         * 怎么做是用户能控制的。混在一起说，用户就分不清哪些能改、哪些不能改。
+         */
+        val ADVICE: Map<QuestionCategory, String> = mapOf(
+            QuestionCategory.CAREER to "事业上宜按部就班推进，别急于求成；先把手上已有的做扎实。",
+            QuestionCategory.WEALTH to "财务上宜守成，不宜追高或加杠杆；先看清再动手。",
+            QuestionCategory.MARRIAGE to "感情上宜坦诚沟通，少翻旧账；有误会就当面说清。",
+            QuestionCategory.HEALTH to "身体上宜静养、及时就医，别拖别硬扛。",
+            QuestionCategory.FAMILY to "家事上宜早作准备、留好凭证；文书合同尤其要看细。",
+            QuestionCategory.CHILDREN to "对子女或下属宜耐心引导，强压反而起反作用。",
+            QuestionCategory.PEER to "与人合作宜守分寸，口头承诺要落到字面。",
+            QuestionCategory.TRAVEL to "出行搬迁宜留退路，能推迟就推迟。",
+            QuestionCategory.GENERAL to "宜先观察形势再动手，不必急于表态。",
+        )
+
         /** 六神断语的常见取象，用于给结果补一句辅助说明。 */
         val LIU_SHEN_HINT = mapOf(
             com.maohongyuan.magic.core.model.LiuShen.QING_LONG to "青龙主喜庆、正财、正面之事。",
