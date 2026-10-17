@@ -257,6 +257,35 @@ fun SettingsScreen(
                 trailing = null,
                 onClick = onClearHistory,
             )
+
+            // ── 恢复默认 ──
+            //
+            // 为什么需要这个：折射强度 / 表面通透度是可调的，但调坏了
+            // （比如把折射强度拖到 0.2×）界面会发灰、玻璃几乎消失，
+            // 用户只能凭记忆手调回去。参数能调坏，就必须能一键还原。
+            //
+            // 只重置**外观与配色**，其余一律保留：
+            // 云端配置是用户手填的凭据，引擎档位与数据开关是他的选择，
+            // 不该被「恢复外观」这个动作连带清掉。
+            Spacer(Modifier.height(MagicSpacing.cardPadding))
+            MagicListRow(
+                title = "恢复默认设置",
+                subtitle = "外观与配色回到初始值",
+                trailing = null,
+                onClick = {
+                    onChange(
+                        settings.copy(
+                            themeMode = MagicSettings.DEFAULT.themeMode,
+                            glassQuality = MagicSettings.DEFAULT.glassQuality,
+                            colorScheme = MagicSettings.DEFAULT.colorScheme,
+                            refractionScale = MagicSettings.DEFAULT.refractionScale,
+                            surfaceAlphaScale = MagicSettings.DEFAULT.surfaceAlphaScale,
+                        )
+                    )
+                },
+            )
+            Spacer(Modifier.height(MagicSpacing.xs))
+            MagicCaption("只重置外观、配色与玻璃参数。云端配置、引擎档位与卦例都不动。")
         }
 
         // ── 关于 ──
