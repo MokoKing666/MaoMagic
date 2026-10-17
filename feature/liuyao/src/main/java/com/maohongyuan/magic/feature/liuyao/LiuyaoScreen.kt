@@ -484,8 +484,16 @@ private fun HexagramCard(chart: LiuYaoChart) {
         Spacer(Modifier.height(MagicSpacing.md))
 
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            MagicHeaderCell("六神", weight = 0f)
-            Spacer(Modifier.width(YaoWidth.SHEN - 8.dp))
+            // ⚠️ 这里**不能**写 MagicHeaderCell("六神", weight = 0f) ——
+            // Compose 的 Modifier.weight 要求 weight > 0，传 0f 会在组合时抛
+            // IllegalArgumentException，表现就是「卦盘一出现就闪退」。
+            // 定宽列直接用 Text + width，不要走 weight。
+            Text(
+                text = "六神",
+                fontSize = MagicType.caption.sp,
+                color = colors.tertiaryText,
+                modifier = Modifier.width(YaoWidth.SHEN),
+            )
             MagicHeaderCell("本卦", weight = 1f)
             Spacer(Modifier.width(YaoWidth.MARK))
             Spacer(Modifier.width(YaoWidth.CHANGE))
