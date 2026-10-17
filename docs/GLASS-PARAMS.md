@@ -76,3 +76,60 @@ drawRect(Color.Black.copy(alpha = 0.03f * progress))
 | `Thick` | LiquidBottomTabs | 8dp | 24 / 24 |
 | `Regular` | 卡片（介于两者之间） | 8dp | 12 / 24 |
 | `Thin` | LiquidButton | 2dp | 12 / 24 |
+
+---
+
+## LiquidToggle（开关）—— 参数全文
+
+`components/LiquidToggle.kt`。这是设置页那个开关该用的实现。
+
+```kotlin
+// 尺寸
+track  64 × 28 dp   Capsule
+knob   40 × 24 dp   Capsule
+dragWidth = 20 dp   （knob 可拖动行程）
+
+// 颜色
+accent  light Color(0xFF34C759)  dark Color(0xFF30D158)
+track   light Color(0xFF787878)@0.2  dark Color(0xFF787880)@0.36
+轨道色 = lerp(trackColor, accentColor, fraction)
+```
+
+**核心：按下时 knob 被「压扁拉长」，模糊退场、折射入场。**
+
+```kotlin
+// knob 形变（trackBackdrop 上的缩放）
+scaleX = lerp(2f/3f, 0.75f, progress)
+scaleY = lerp(0f,    0.75f, progress)
+
+// effects —— 注意是反向的
+blur(8.dp * (1f - progress))                        // 按下时模糊消失
+lens(5.dp * progress, 10.dp * progress,
+     chromaticAberration = true)                    // 按下时折射出现
+
+// highlight
+Highlight.Ambient.copy(
+    width = Ambient.width / 1.5f,
+    blurRadius = Ambient.blurRadius / 1.5f,
+    alpha = progress
+)
+
+// shadow / innerShadow
+Shadow(radius = 4.dp, color = Color.Black.copy(alpha = 0.05f))
+InnerShadow(radius = 4.dp * progress, alpha = progress)
+
+// surface —— 白遮罩随按压淡出
+onDrawSurface = { drawRect(Color.White.copy(alpha = 1f - progress)) }
+
+// layerBlock —— 速度带来额外拉伸
+scaleX = scaleX / (1f - (velocity/50f * 0.75f).coerceIn(-0.2f, 0.2f))
+scaleY = scaleY * (1f - (velocity/50f * 0.25f).coerceIn(-0.2f, 0.2f))
+```
+
+**依赖**：`utils/DampedDragAnimation.kt`（按压/拖拽/速度的动画状态机），
+移植时必须一并抄。
+
+### 移植清单
+1. `utils/DampedDragAnimation.kt`
+2. `components/LiquidToggle.kt`
+3. 设置页的开关全部换掉
