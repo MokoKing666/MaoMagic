@@ -360,6 +360,12 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
         buildChart(result)
     }
 
+    /** 批量导入卦例（已在界面层按 id 去重） */
+    fun importRecords(list: List<DivinationRecord>) {
+        if (list.isEmpty()) return
+        viewModelScope.launch { list.forEach { recordStore.add(it) } }
+    }
+
     /** 从历史卦例退回当前起卦（清掉历史标记，恢复今天的日课） */
     fun exitRecord() {
         state = state.copy(

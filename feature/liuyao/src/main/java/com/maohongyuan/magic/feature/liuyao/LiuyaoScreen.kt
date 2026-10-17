@@ -16,6 +16,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlin.math.cos
 import kotlin.math.abs
@@ -153,6 +156,37 @@ fun LiuyaoScreen(scrollState: ScrollState) {
         }
 
         state.chart?.let { chart ->
+            // ── 历史卦例标识 ──
+            //
+            // 点开历史卦例后，盘面与刚起卦长得一模一样。不加这条，
+            // 用户会以为是自己新起的卦 —— 那这个功能反而制造误解。
+            if (state.viewingRecordId != null) {
+                GlassCard(level = GlassLevel.Thin) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "正在查看历史卦例",
+                                fontSize = MagicType.footnote.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = colors.warning,
+                            )
+                            Text(
+                                text = "日课按记录时间还原，不是今天",
+                                fontSize = MagicType.caption.sp,
+                                color = colors.tertiaryText,
+                            )
+                        }
+                        Text(
+                            text = "返回当前",
+                            fontSize = MagicType.footnote.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.accent,
+                            modifier = Modifier.clickable { vm.exitRecord() }.padding(MagicSpacing.sm),
+                        )
+                    }
+                }
+            }
+
             HexagramCard(chart)
             CourseCard(chart)
         }
@@ -162,6 +196,7 @@ fun LiuyaoScreen(scrollState: ScrollState) {
         if (state.history.isNotEmpty()) {
             HistoryCard(
                 records = state.history,
+                onImport = vm::importRecords,
                 onOpen = vm::openRecord,
                 onDelete = vm::deleteRecord,
                 onClear = vm::clearHistory,
@@ -986,15 +1021,66 @@ private fun HistoryCard(
     onOpen: (DivinationRecord) -> Unit,
     onDelete: (String) -> Unit,
     onClear: () -> Unit,
+    onImport: (List<DivinationRecord>) -> Unit,
 ) {
     val colors = LocalMagicColors.current
     val shown = records.take(20)
+    val ctx = LocalContext.current
+
+    // ── 导出 / 导入 ──
+    //
+    // 卦例只存本机，换手机就全丢。用系统文件选择器（SAF），
+    // 不申请存储权限、不写死路径，用户自己选存哪、从哪读。
+    val exportLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                ctx.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(HistoryTransfer.toJson(records).toByteArray())
+                }
+            }
+        }
+    }
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            runCatching {
+                val text = ctx.contentResolver.openInputStream(uri)
+                    ?.bufferedReader()?.use { it.readText() }
+                if (text != null) {
+                    HistoryTransfer.fromJson(text).getOrNull()?.let { parsed ->
+                        // 按 id 去重：重复导入同一份文件不该产生重复记录
+                        val existing = records.map { it.id }.toSet()
+                        onImport(parsed.records.filterNot { it.id in existing })
+                    }
+                }
+            }
+        }
+    }
     // 待确认删除的记录 id。null 表示没有待确认项。
     var pendingDeleteId by remember { mutableStateOf<String?>(null) }
 
     GlassCard(level = GlassLevel.Thin) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             MagicSectionTitle("最近卦例", modifier = Modifier.weight(1f))
+            Text(
+                text = "导出",
+                fontSize = MagicType.footnote.sp,
+                color = colors.accent,
+                modifier = Modifier
+                    .clickable { exportLauncher.launch("卦例-${System.currentTimeMillis()}.json") }
+                    .padding(horizontal = MagicSpacing.sm, vertical = 4.dp),
+            )
+            Text(
+                text = "导入",
+                fontSize = MagicType.footnote.sp,
+                color = colors.accent,
+                modifier = Modifier
+                    .clickable { importLauncher.launch(arrayOf("application/json")) }
+                    .padding(horizontal = MagicSpacing.sm, vertical = 4.dp),
+            )
             Text(
                 text = "清空",
                 fontSize = MagicType.footnote.sp,
