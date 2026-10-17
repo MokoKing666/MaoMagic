@@ -553,8 +553,11 @@ private fun YaoTableRow(line: LiuYaoLine) {
             modifier = Modifier.weight(YaoCols.SHEN),
         )
         Text(
-            // 六亲 + 五行：断卦看的就是用神受生受克，五行必须直接摆在眼前
-            text = line.liuQin.label + line.naJia.wuXing.label,
+            // 六亲 + 地支 + 五行（如「父母未土」）。
+            // 断卦看的是用神受生受克：六亲定是谁，地支定具体是哪一爻，
+            // 五行定生克关系 —— 三者缺一都要回去对照爻位，所以摆在一起。
+            // 参照通行排盘的写法「父未土 丁」，只是不缩写六亲、天干放卦列。
+            text = line.liuQin.label + line.naJia.branch.label + line.naJia.wuXing.label,
             fontSize = MagicType.subheadline.sp,
             fontWeight = FontWeight.Medium,
             color = if (line.kong) colors.tertiaryText else colors.secondaryText,
@@ -583,7 +586,8 @@ private fun YaoTableRow(line: LiuYaoLine) {
             yang = line.bian?.let { !line.yang } ?: line.yang,
             ganZhi = line.bian?.naJia?.label ?: "—",
             tint = colors.secondaryText,
-            sub = line.bian?.let { it.liuQin.label + it.naJia.wuXing.label },
+            // 变卦侧同样标六亲+地支+五行：动爻变出的六亲才是「变出什么」的答案
+            sub = line.bian?.let { it.liuQin.label + it.naJia.branch.label + it.naJia.wuXing.label },
             subColor = colors.tertiaryText,
             modifier = Modifier.weight(YaoCols.BIAN),
         )
