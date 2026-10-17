@@ -5,10 +5,14 @@ import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.BackendType
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Modality
+import com.google.ai.edge.litertlm.ModelInfo
 import com.maohongyuan.magic.core.interpret.InferencePrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 /**
@@ -63,6 +67,12 @@ class LiteRtLmBackend(
         }
         LlmLog.i("开始加载：${modelFile.absolutePath} (${modelFile.length() / 1048576} MB)")
 
+        // 读模型自己声明的能力 —— 只用于日志与排查，**不参与后端选择**。
+        // 之前用它过滤候选，结果模型声明与实际能起什么不一致，导致整链失效。
+        // 现在只"问"，不"信"：选择仍由运行时逐个实测决定。
+        val info = withTimeoutOrNull(15_000) { readModelInfo() }
+        LlmLog.i("模型自述 → ${info ?: "读取超时或失败"}")
+
         // 后端必须按运行时逐个实测，不用 ModelInfo 的元数据预先过滤。
         // 真实设备上 ModelInfo.from(1.9GB 文件) 超过 3 秒超时，导致此前跳过 NPU；
         // 该设备没有 OpenCL，GPU 失败，GPU 专用模型又没有 CPU 图，于是一直落基础。
@@ -108,6 +118,31 @@ class LiteRtLmBackend(
         lastError = "后端 ${pref.name} 初始化失败"
         LlmLog.e(lastError!!)
         false
+    }
+
+    /**
+     * 直接问模型：你支持什么。
+     *
+     * `ModelInfo.from()` 只解析元数据不加载权重，但在 1.9 GB 文件上实测要 3 秒以上，
+     * 所以放宽到 15 秒。**结果只写日志**，不参与后端选择。
+     */
+    private suspend fun readModelInfo(): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            ModelInfo.from(modelFile.absolutePath).use { m ->
+                val backends = runCatching { m.supportedBackends(Modality.TEXT) }
+                    .getOrNull()?.joinToString("/") ?: "?"
+                val npu = runCatching { m.npuBrand(Modality.TEXT) }.getOrNull()
+                val soc = runCatching { m.socName(Modality.TEXT) }.getOrNull()
+                buildString {
+                    append("backends=$backends")
+                    append(" npuBrand=$npu")
+                    append(" soc=$soc")
+                    append(" minRuntime=${m.minRuntimeVersion()}")
+                    append(" maxCtx=${m.maxContextTokens()}")
+                    append(" gpu=${BackendType.GPU in (runCatching { m.supportedBackends(Modality.TEXT) }.getOrNull() ?: emptyList())}")
+                }
+            }
+        }.onFailure { LlmLog.w("读取模型元数据失败", it) }.getOrNull()
     }
 
     override suspend fun isReady(): Boolean = engine != null
