@@ -265,8 +265,11 @@ private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
         // 每次摇出一爻，太极图翻一圈 —— 给「摇」这个动作一个视觉落点。
         // 用 rotationY 而不是旋转，是因为铜钱是翻面不是转圈。
         val flip = remember { Animatable(0f) }
+        val playCoinSound = rememberCoinSound()
         LaunchedEffect(throws.size) {
             if (throws.isNotEmpty()) {
+                // 音效与动画同时起 —— 声音先到、画面跟上，才像"摇出来"的
+                playCoinSound()
                 flip.snapTo(0f)
                 flip.animateTo(360f, tween(durationMillis = 480, easing = FastOutSlowInEasing))
             }
