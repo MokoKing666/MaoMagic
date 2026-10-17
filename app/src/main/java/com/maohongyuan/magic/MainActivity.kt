@@ -37,6 +37,7 @@ import com.maohongyuan.magic.feature.meihua.MeihuaScreen
 import com.maohongyuan.magic.core.fortune.FortunePeriod
 import com.maohongyuan.magic.feature.fortune.FortuneScreen
 import com.maohongyuan.magic.feature.personality.PersonalityScreen
+import com.maohongyuan.magic.feature.daliuren.DaLiuRenScreen
 import com.maohongyuan.magic.feature.ziwei.ZiWeiScreen
 import com.maohongyuan.magic.feature.tarot.TarotScreen
 import com.maohongyuan.magic.feature.xiaoliuren.XiaoLiuRenScreen
@@ -221,6 +222,7 @@ private fun FeatureHost(
         SystemId.TAROT -> TarotScreen(scrollState)
         SystemId.MBTI -> PersonalityScreen(scrollState)
         SystemId.ZIWEI -> ZiWeiScreen(scrollState)
+        SystemId.DALIUREN -> DaLiuRenScreen(scrollState)
         SystemId.DAILY_FORTUNE -> FortuneScreen(FortunePeriod.DAILY, scrollState)
         SystemId.MONTHLY_FORTUNE -> FortuneScreen(FortunePeriod.MONTHLY, scrollState)
         SystemId.ALMANAC -> AlmanacScreen(
