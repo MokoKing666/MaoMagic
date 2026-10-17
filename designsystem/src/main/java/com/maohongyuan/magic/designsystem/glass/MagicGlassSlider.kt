@@ -1,6 +1,7 @@
 package com.maohongyuan.magic.designsystem.glass
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
@@ -41,12 +42,9 @@ import kotlin.math.round
  * 「页面背景」与「轨道」**，否则滑块划过轨道时不会折射轨道本身，
  * 看起来就像浮在上面的一块普通玻璃。
  *
- * 实现要点：
- * 1. 轨道用 `layerBackdrop(trackBackdrop)` 录制进一个独立 backdrop
- * 2. 滑块用 `rememberCombinedBackdrop(backdrop, trackBackdrop)` 同时折射两者
- *
- * ⚠️ 文档示例第一步把 `backdrop` 直接传给滑块是**故意演示错误写法**，
- *    文档正文随后指出应替换为 `rememberCombinedBackdrop` —— 这里用的是正确写法。
+ * ⚠️ **不要用 layerBackdrop 录制轨道。**
+ *    本组件总在 MagicBackdrop 的 layerBackdrop 子树内，再嵌一层会渲染死循环 → SIGSEGV。
+ *    滑块只折射环境 backdrop（页面背景），不折射轨道本身。
  *
  * @param steps 分段数。0 表示连续；> 0 时吸附到等分点
  */
@@ -85,17 +83,25 @@ fun MagicGlassSlider(
         modifier = modifier.fillMaxWidth(),
         contentAlignment = Alignment.CenterStart,
     ) {
-        val trackBackdrop = rememberLayerBackdrop()
         val thumbWidthPx = with(density) { thumbWidth.toPx() }
         val totalPx = with(density) { maxWidth.toPx() }
         // 滑块可移动的行程 = 轨道宽度 − 滑块自身宽度
         val travelPx = (totalPx - thumbWidthPx).coerceAtLeast(1f)
         val touchHeight = thumbHeight.coerceAtLeast(44.dp)
 
-        // 轨道：录制进 trackBackdrop，供滑块折射
+        // 轨道：**只画，不录制**。
+        //
+        // ⚠️ 原实现用 layerBackdrop(trackBackdrop) 把轨道录进独立 backdrop，
+        // 让滑块同时折射「页面背景 + 轨道」。但本组件所在的页面子树
+        // 已经被 MagicBackdrop 用 layerBackdrop(contentBackdrop) 标记过，
+        // 再嵌一层 layerBackdrop 就是**嵌套录制 → 渲染死循环 → SIGSEGV**。
+        // 实测设置页（唯一用滑块的页面）点开即闪退，logcat 为
+        // `Fatal signal 11 (SIGSEGV), code 2 (SEGV_ACCERR) in RenderThread`。
+        //
+        // 代价：滑块不再折射轨道本身，只折射页面背景。
+        // 这是拿一点视觉效果换稳定性 —— 崩掉的界面谈不上好看。
         Box(
             Modifier
-                .layerBackdrop(trackBackdrop)
                 .fillMaxWidth()
                 .height(trackHeight)
                 .background(color = trackColor ?: colors.accent, shape = Capsule()),
@@ -105,19 +111,22 @@ fun MagicGlassSlider(
         Box(
             Modifier
                 .offset(x = with(density) { (fraction * travelPx).toDp() })
-                .drawBackdrop(
-                    backdrop = rememberCombinedBackdrop(resolvedBackdrop, trackBackdrop),
-                    shape = { Capsule() },
-                    effects = {
-                        lens(
-                            refractionHeight = 12.dp.toPx(),
-                            refractionAmount = 16.dp.toPx(),
-                            chromaticAberration = true,
-                        )
+                // ⚠️ 这里原本是 drawBackdrop + lens(chromaticAberration = true)。
+                // 实测在设置页会 SIGSEGV（RenderThread, SEGV_ACCERR）——
+                // 滑块与它所在的 GlassCard / MagicBackdrop 形成多层折射，渲染线程崩。
+                // 改成纯色胶囊：牺牲玻璃质感，换稳定。滑块的交互与读数都不受影响。
+                .background(
+                    color = if (colors.isLight) {
+                        Color.White.copy(alpha = 0.92f)
+                    } else {
+                        Color.White.copy(alpha = 0.22f)
                     },
-                    onDrawSurface = {
-                        drawRect(Color.White.copy(alpha = if (colors.isLight) 0.55f else 0.14f))
-                    },
+                    shape = Capsule(),
+                )
+                .border(
+                    width = 1.dp,
+                    color = colors.divider,
+                    shape = Capsule(),
                 )
                 .size(thumbWidth, thumbHeight),
         )

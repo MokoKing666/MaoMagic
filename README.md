@@ -72,11 +72,13 @@
 
 | 六爻起卦 | 卦盘与断卦 | 八字命盘 | 梅花易数 |
 |---|---|---|---|
-| ![六爻](docs/screenshots/01-liuyao.png) | ![卦盘](docs/screenshots/09-liuyao-chart.png) | ![八字](docs/screenshots/02-bazi.png) | ![梅花](docs/screenshots/03-meihua.png) |
+| ![传统](docs/screenshots/01-board-traditional.png) | ![八字](docs/screenshots/02-bazi.png) | ![紫微](docs/screenshots/03-ziwei.png) | ![六爻](docs/screenshots/04-liuyao.png) |
+| ![梅花](docs/screenshots/05-meihua.png) | ![小六壬](docs/screenshots/06-xiaoliuren.png) | ![大六壬](docs/screenshots/07-daliuren.png) | ![奇门](docs/screenshots/08-qimen.png) |
+| ![现代](docs/screenshots/09-board-modern.png) | ![塔罗](docs/screenshots/10-tarot.png) | ![十六型](docs/screenshots/11-personality.png) | ![日常](docs/screenshots/12-board-daily.png) |
+| ![黄历](docs/screenshots/13-almanac.png) | ![日运](docs/screenshots/14-daily-fortune.png) | ![月运](docs/screenshots/15-monthly-fortune.png) | ![设置](docs/screenshots/16-settings.png) |
 
 | 今日黄历 | 深色主题 | 设置 | 开源许可 |
 |---|---|---|---|
-| ![黄历](docs/screenshots/04-almanac.png) | ![深色](docs/screenshots/07-dark.png) | ![设置](docs/screenshots/06-settings.png) | ![许可](docs/screenshots/08-license.png) |
 
 ### 流体玻璃
 
