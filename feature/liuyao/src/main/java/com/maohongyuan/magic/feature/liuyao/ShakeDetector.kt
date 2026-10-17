@@ -51,20 +51,38 @@ fun rememberShakeDetector(enabled: Boolean, onShake: () -> Unit) {
         }
 
         var lastShakeAt = 0L
+        // 连续超阈值的采样数。
+        //
+        // ⚠️ 只看单帧是不够的：敲一下桌子、把手机放到桌上，都会产生
+        // 一帧很高的尖峰，但那是「磕碰」不是「摇」。真实摇动是持续的，
+        // 会连续多帧超阈值。所以要求**连续 2 帧**才算。
+        // 实测只判单帧时，点一下按钮都会误触出 3~4 爻。
+        var highFrames = 0
+
         val listener = object : SensorEventListener {
             override fun onSensorChanged(event: SensorEvent) {
-                if (!enabledState) return
+                if (!enabledState) {
+                    highFrames = 0
+                    return
+                }
                 val gx = event.values[0]
                 val gy = event.values[1]
                 val gz = event.values[2]
                 // 去掉重力后的净加速度
                 val net = sqrt(gx * gx + gy * gy + gz * gz) - SensorManager.GRAVITY_EARTH
-                if (abs(net) < SHAKE_THRESHOLD) return
+
+                if (abs(net) < SHAKE_THRESHOLD) {
+                    highFrames = 0
+                    return
+                }
+                highFrames++
+                if (highFrames < REQUIRED_HIGH_FRAMES) return
 
                 // 防抖：一次摇动会在几十毫秒内连发多帧，不加这个会一摇连出好几爻
                 val now = System.currentTimeMillis()
                 if (now - lastShakeAt < SHAKE_COOLDOWN_MS) return
                 lastShakeAt = now
+                highFrames = 0
                 callback()
             }
 
@@ -76,8 +94,11 @@ fun rememberShakeDetector(enabled: Boolean, onShake: () -> Unit) {
     }
 }
 
-/** 触发摇动的净加速度阈值（m/s²），已扣除重力 */
-private const val SHAKE_THRESHOLD = 18f
+/** 触发摇动的净加速度阈值（m/s²），已扣除重力。原为 18，实测误触偏多，提到 24。 */
+private const val SHAKE_THRESHOLD = 24f
+
+/** 需要连续多少帧超阈值才算一次摇动。单帧尖峰是「磕碰」，不是「摇」。 */
+private const val REQUIRED_HIGH_FRAMES = 2
 
 /** 两次摇动之间的最小间隔。一次摇动会连续触发多帧，必须防抖。 */
 private const val SHAKE_COOLDOWN_MS = 700L

@@ -16,6 +16,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import kotlin.math.cos
+import kotlin.math.abs
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.border
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.animation.core.tween
@@ -258,28 +264,77 @@ private fun castPanel(content: @Composable androidx.compose.foundation.layout.Co
     }
 }
 
+/**
+ * 一枚铜钱。
+ *
+ * [angle] 是翻转进度角（0..720）。正面（字）与背面（背）在每 180° 交替，
+ * 再配合 `scaleX = |cos θ|` 压扁，读起来就是「翻面」。
+ */
+@Composable
+private fun CoinFace(angle: Float, isZi: Boolean, thrown: Boolean, tint: Color, surface: Color) {
+    val colors = LocalMagicColors.current
+    val rad = Math.toRadians(angle.toDouble())
+    val squash = abs(cos(rad)).toFloat().coerceAtLeast(0.04f)
+    val frontSide = (angle / 180f).toInt() % 2 == 0
+    val showingZi = if (frontSide) isZi else !isZi
+
+    // 用 🪙 而不是自己画圆：手绘的圆形加边框太像按钮，不像铜钱。
+    // 翻转只作用在 emoji 上（scaleX 压扁），字/背标签放在下面不参与翻转 ——
+    // 标签一起翻的话，转过去就是镜像字，反而看不清。
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = "🪙",
+            fontSize = 34.sp,
+            modifier = Modifier.graphicsLayer { scaleX = squash },
+        )
+        Text(
+            text = when {
+                !thrown -> "?"
+                showingZi -> "字"
+                else -> "背"
+            },
+            fontSize = MagicType.caption.sp,
+            fontWeight = FontWeight.Medium,
+            color = if (thrown && showingZi) tint else colors.tertiaryText,
+        )
+    }
+}
+
 @Composable
 private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
     val colors = LocalMagicColors.current
     castPanel {
-        // 每次摇出一爻，太极图翻一圈 —— 给「摇」这个动作一个视觉落点。
-        // 用 rotationY 而不是旋转，是因为铜钱是翻面不是转圈。
+        // ── 三枚铜钱 ──
+        //
+        // 每次摇出一爻：三枚同时翻两圈，落在本爻的结果上。
+        // 用 scaleX = |cos θ| 做翻转，不用 rotationY ——
+        // rotationY 转过 90° 后文字会镜像，还得再反向抵消一次，反而复杂。
+        // scaleX 压扁到 0 再展开，视觉上就是「翻过来」，且没有镜像问题。
         val flip = remember { Animatable(0f) }
         val playCoinSound = rememberCoinSound()
         LaunchedEffect(throws.size) {
             if (throws.isNotEmpty()) {
-                // 音效与动画同时起 —— 声音先到、画面跟上，才像"摇出来"的
+                // 音效与动画同时起 —— 声音先到、画面跟上，才像「摇出来」的
                 playCoinSound()
                 flip.snapTo(0f)
-                flip.animateTo(360f, tween(durationMillis = 480, easing = FastOutSlowInEasing))
+                flip.animateTo(720f, tween(durationMillis = 520, easing = FastOutSlowInEasing))
             }
         }
-        Text(
-            text = "☯",
-            fontSize = MagicType.display.sp,
-            color = colors.accent,
-            modifier = Modifier.graphicsLayer { rotationY = flip.value },
-        )
+
+        // 未摇时不预设结果：显示「?」，否则三枚都显示「字」会让人以为已经出结果了
+        val lastCoins: List<Int>? = throws.lastOrNull()?.coins
+        Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.md)) {
+            repeat(3) { i ->
+                CoinFace(
+                    angle = flip.value,
+                    isZi = lastCoins?.getOrNull(i) == 3,
+                    thrown = lastCoins != null,
+                    // 还没摇过时用中性色，摇过之后用强调色
+                    tint = if (throws.isEmpty()) colors.tertiaryText else colors.accent,
+                    surface = colors.backdropBase,
+                )
+            }
+        }
         Spacer(Modifier.height(MagicSpacing.row))
         Text("三枚铜钱，摇六次成卦", fontSize = MagicType.subheadline.sp, color = colors.secondaryText)
         Spacer(Modifier.height(MagicSpacing.xs))
