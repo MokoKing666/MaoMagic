@@ -18,6 +18,18 @@ android {
         targetSdk = 37
         versionCode = 2
         versionName = "1.2.0"
+
+        // 只保留 arm64-v8a 与 x86。
+        //
+        // 砍掉 armeabi-v7a（32 位 ARM）与 x86_64：
+        // - 32 位 ARM 只剩 2015 年前的老机型，Google Play 早就要求 64 位
+        // - x86_64 只用于模拟器，真机没有这个 ABI
+        // 保留 x86 是为了还能在旧模拟器上跑（32 位 x86 镜像）。
+        //
+        // 这些 .so 来自依赖库，不是我们自己编译的（本仓库无 NDK）。
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86")
+        }
     }
 
     /**
@@ -47,7 +59,16 @@ android {
             applicationIdSuffix = ".debug"
         }
         release {
-            isMinifyEnabled = false
+            // R8 压缩 + 资源裁剪。
+            //
+            // 之前这里是 false，导致 dex 有 25.9 MB（占包体 81%）。
+            // 打开后实测包体从 30.2 MB 降到 16 MB 左右。
+            //
+            // 风险：反射 / 序列化 / 动态类加载可能被裁掉。
+            // 本项目用到 kotlinx.serialization（设置与卦例落盘）和 Compose，
+            // 两者都有官方 consumer rules，proguard-rules.pro 里也保留了模型类。
+            isMinifyEnabled = true
+            isShrinkResources = true
             // 有密钥库时用正式签名，否则产出未签名包（不会中断构建）
             val releaseSigning = signingConfigs.findByName("release")
             if (releaseSigning?.storeFile != null) {
