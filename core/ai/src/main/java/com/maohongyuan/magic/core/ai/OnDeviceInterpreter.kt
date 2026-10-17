@@ -1,11 +1,15 @@
 package com.maohongyuan.magic.core.ai
 
+import android.content.Context
 import com.maohongyuan.magic.core.interpret.DivinationInterpreter
 import com.maohongyuan.magic.core.interpret.EngineTier
 import com.maohongyuan.magic.core.interpret.Interpretation
 import com.maohongyuan.magic.core.interpret.InterpretationRequest
+import com.maohongyuan.magic.core.interpret.InterpretationSection
+import com.maohongyuan.magic.core.interpret.Tone
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import java.io.File
 
 /**
  * 端上模型引擎（Tier 3）。
@@ -17,12 +21,12 @@ import kotlinx.coroutines.flow.flow
  * 这条分工是硬性的：小参数量模型做多步五行生克推理并不可靠，
  * 但它把已经确定的事实写成通顺的中文，做得很好。
  *
- * ── 当前状态 ──
- * 推理后端尚未接入。[LocalModelBackend] 是一个空位 ——
- * 接入 LiteRT-LM（或其它端上推理运行时）后，把 [isAvailable] 改成
- * 「模型已下载且运行时初始化成功」，[interpret] 改成流式调用即可。
+ * ── 为什么不做 JSON 解析 ──
+ * 让模型输出 JSON 看似更「结构化」，实际很脆：多一个小括号、多一句开场白，
+ * 解析就失败，用户看到的是空白。而这里要的只是**一段话**。
  *
- * 在那之前本引擎恒不可用，降级链会跳过它 —— 不会影响现有功能。
+ * 所以：**判词与吉凶直接取自 [InterpretationRequest.facts]（算法算的，一定对）**，
+ * 模型的输出整段作为「解读」正文。模型写崩了也不会影响判词。
  */
 class OnDeviceInterpreter(
     private val backend: LocalModelBackend? = null,
@@ -30,28 +34,53 @@ class OnDeviceInterpreter(
 
     override val tier: EngineTier = EngineTier.ON_DEVICE
 
-    override suspend fun isAvailable(): Boolean =
-        backend?.isReady() == true
+    /** 模型文件存在就算可用。真正的加载推迟到第一次 [interpret] */
+    override suspend fun isAvailable(): Boolean = backend != null
 
     override fun interpret(request: InterpretationRequest): Flow<Interpretation> = flow {
         val b = backend ?: return@flow
-        if (!b.isReady()) return@flow
 
         val raw = b.generate(
             systemPrompt = ChartPrompt.SYSTEM_PROMPT,
             userMessage = ChartPrompt.userMessage(request),
         ) ?: return@flow
 
-        // 端上模型输出的是自由文本，结构化靠 ChartPrompt 里约定的格式。
-        // 解析失败就放弃 —— 让降级链继续往下走，不要产出半成品。
-        val parsed = runCatching { parse(raw) }.getOrNull() ?: return@flow
-        emit(parsed)
+        val text = raw.trim()
+        if (text.isEmpty()) return@flow
+
+        // 判词、吉凶、用神说明一律取算法结果 —— 模型不参与判断
+        val facts = request.facts
+        emit(
+            Interpretation(
+                verdict = facts?.verdict ?: com.maohongyuan.magic.core.interpret.Verdict.NEUTRAL,
+                headline = facts?.headline ?: "解读",
+                sections = listOf(
+                    InterpretationSection(
+                        title = "解读",
+                        body = text,
+                        tone = Tone.NEUTRAL,
+                    )
+                ),
+                tier = EngineTier.ON_DEVICE,
+                yongShenNote = facts?.yongShenNote,
+            )
+        )
     }
 
-    private fun parse(raw: String): Interpretation {
-        // TODO: 等接入真实模型后再定输出格式（建议让模型输出 JSON）。
-        // 现在抛出，使 flow 为空 → 降级链跳过本引擎。
-        throw UnsupportedOperationException("端上模型输出解析尚未实现")
+    companion object {
+        /**
+         * 按当前设备装配。模型不存在时返回一个 `isAvailable() == false` 的实例，
+         * 降级链会自动跳过它 —— 不需要调用方判断。
+         */
+        fun fromDevice(context: Context): OnDeviceInterpreter {
+            val model = LocalModel.candidatesFor(DeviceProfile.current()).first()
+            val file = File(ModelDownloader.modelDir(context.filesDir), model.fileName)
+            return if (file.exists()) {
+                OnDeviceInterpreter(LiteRtLmBackend(context.applicationContext, file))
+            } else {
+                OnDeviceInterpreter(null)
+            }
+        }
     }
 }
 
@@ -63,7 +92,7 @@ class OnDeviceInterpreter(
  */
 interface LocalModelBackend {
 
-    /** 模型已下载且运行时初始化成功 */
+    /** 运行时是否已就绪（模型已加载） */
     suspend fun isReady(): Boolean
 
     /**

@@ -8,6 +8,7 @@ import androidx.lifecycle.AndroidViewModel
 import com.maohongyuan.magic.core.calendar.CalendarService
 import com.maohongyuan.magic.core.ai.CloudAiConfig
 import com.maohongyuan.magic.core.ai.CloudAiInterpreter
+import com.maohongyuan.magic.core.ai.OnDeviceInterpreter
 import com.maohongyuan.magic.core.data.SecretStore
 import com.maohongyuan.magic.core.data.SettingsStore
 import com.maohongyuan.magic.core.data.DivinationRecord
@@ -115,6 +116,9 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
      */
     private val chain = InterpreterChain(
         listOf(
+            // Tier3：端上模型。模型文件不存在时 isAvailable 为 false，链自动跳过。
+            // 它只负责把规则引擎算好的 facts 说成人话，不参与卦理计算。
+            OnDeviceInterpreter.fromDevice(getApplication()),
             CloudAiInterpreter { cloudConfig },
             LiuYaoRuleEngine(),
         )

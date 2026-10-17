@@ -91,6 +91,8 @@ class LiteRtLmBackend(
      */
     override suspend fun generate(systemPrompt: String, userMessage: String): String? =
         withContext(Dispatchers.IO) {
+            // 懒加载：模型 2 GB，不能一进页面就吃内存
+            if (inference == null && !load()) return@withContext null
             val llm = inference ?: return@withContext null
             val prompt = buildPrompt(systemPrompt, userMessage)
             runCatching { llm.generateResponse(prompt) }
