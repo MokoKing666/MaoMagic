@@ -180,27 +180,35 @@ private fun QuestionRow(
         )
         Spacer(Modifier.height(MagicSpacing.xs))
 
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = question.l,
-                fontSize = MagicType.footnote.sp,
-                color = if (selected != null && selected <= 2) colors.primaryText else colors.secondaryText,
-                textAlign = TextAlign.Start,
-                modifier = Modifier.weight(1f),
-            )
-            Spacer(Modifier.height(0.dp))
-            // 五点：1 完全偏左 … 5 完全偏右
+        // ── 为什么是上下布局而不是左右 ──
+        // 左右布局下，5 个圆点要占掉约 180dp，剩下的宽度分给两段中文描述
+        // 每段只有 70dp 左右 —— 中文 13sp 一个字约 13dp，等于每行只能放 5 个字，
+        // 实测被压成「聚会里主 / 动找陌生 / 人聊天」这种竖排，极难读。
+        // 改成描述各占整行、圆点居中，中文再长也不会挤。
+        Text(
+            text = question.l,
+            fontSize = MagicType.footnote.sp,
+            color = if (selected != null && selected <= 2) colors.primaryText else colors.secondaryText,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(MagicSpacing.sm))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // 五点：1 完全偏上（左）… 5 完全偏下（右）
             repeat(5) { i ->
                 val choice = i + 1
                 val on = selected == choice
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 3.dp)
-                        .size(if (choice == 3) 26.dp else 30.dp)
+                        .padding(horizontal = 6.dp)
+                        .size(if (choice == 3) 30.dp else 34.dp)
                         .clip(shapes.pill)
-                        .background(
-                            if (on) colors.accent else colors.divider,
-                        )
+                        .background(if (on) colors.accent else colors.divider)
                         .clickable { onSelect(choice) },
                     contentAlignment = Alignment.Center,
                 ) {
@@ -214,15 +222,16 @@ private fun QuestionRow(
                     }
                 }
             }
-            Spacer(Modifier.height(0.dp))
-            Text(
-                text = question.r,
-                fontSize = MagicType.footnote.sp,
-                color = if (selected != null && selected >= 4) colors.primaryText else colors.secondaryText,
-                textAlign = TextAlign.End,
-                modifier = Modifier.weight(1f),
-            )
         }
+
+        Spacer(Modifier.height(MagicSpacing.sm))
+        Text(
+            text = question.r,
+            fontSize = MagicType.footnote.sp,
+            color = if (selected != null && selected >= 4) colors.primaryText else colors.secondaryText,
+            textAlign = TextAlign.End,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
