@@ -61,10 +61,18 @@ enum class LocalModel(
         npuSocCodes = setOf("SM8750", "SM8750P", "SM8750-AB"),
     ),
 
-    /** GPU 版：绝大多数 Android 的首选 */
+    /**
+     * 主推变体：MediaPipe 的 .task 包。
+     *
+     * ⚠️ **不能用 .litertlm** —— 两者文件头不同：
+     * 
+     * MediaPipe tasks-genai 只认 TFL3。喂 LITERTLM 会得到
+     *  ——
+     * GPU 和 CPU 报同一个错，很容易误判成 GPU 问题。
+     */
     GPU(
-        fileName = "gemma-4-E2B-it-gpu.litertlm",
-        sizeBytes = 2_008_432_640L,   // 实测 Content-Length
+        fileName = "gemma-4-E2B-it-web.task",
+        sizeBytes = 2_003_697_664L,   // 实测 Content-Length
         label = "GPU 加速",
         note = "通用 GPU 加速，绝大多数手机可用。",
     ),
