@@ -19,6 +19,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import com.maohongyuan.magic.core.calendar.LiuNianService
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -82,6 +84,8 @@ fun BaziScreen(scrollState: ScrollState) {
     var gender by remember { mutableStateOf(Gender.MALE) }
     var chart by remember { mutableStateOf<BaZiChart?>(null) }
     var interpretation by remember { mutableStateOf<Interpretation?>(null) }
+    // 当前展开流年的大运。默认第 1 步（第一步大运），起盘即有内容可看
+    var selectedDaYun by remember { mutableIntStateOf(1) }
     var error by remember { mutableStateOf<String?>(null) }
 
     fun cast() {
@@ -111,7 +115,7 @@ fun BaziScreen(scrollState: ScrollState) {
     }
 
     MagicPageContent(scrollState = scrollState) {
-        MagicPageHeader(title = "八字命盘", subtitle = "四柱 · 十神 · 大运")
+        MagicPageHeader(title = "八字命盘", subtitle = "四柱 · 十神 · 大运流年")
 
         // ── 生辰 ──
         GlassCard {
@@ -216,11 +220,18 @@ fun BaziScreen(scrollState: ScrollState) {
                 MagicCaption("统计口径为四柱 4 干 + 4 支，不含藏干。")
             }
 
-            // ── 大运 ──
+            // ── 大运 · 流年 ──
+            //
+            // 大运是可点的：点中某一步，下方展开它管的十个流年。
+            // 大运只给「十年一格的走势」，流年才回答「今年具体怎样」——
+            // 两者必须一起看，缺了流年等于只说了个大概。
             GlassCard(level = GlassLevel.Thin) {
-                MagicSectionTitle("大运")
+                MagicSectionTitle("大运 · 流年")
                 Spacer(Modifier.height(MagicSpacing.xs))
-                MagicCaption("${if (c.forward) "顺行" else "逆行"} · ${c.startAge} 岁起运")
+                MagicCaption(
+                    "${if (c.forward) "顺行" else "逆行"} · ${c.startAge} 岁起运　" +
+                        "点大运看流年"
+                )
                 Spacer(Modifier.height(MagicSpacing.md))
 
                 Row(
@@ -230,22 +241,28 @@ fun BaziScreen(scrollState: ScrollState) {
                     horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row),
                 ) {
                     c.daYun.forEach { d ->
+                        val active = d.index == selectedDaYun
                         Column(
                             modifier = Modifier
                                 .width(84.dp)
                                 .background(
-                                    if (d.index == 1) colors.accent.copy(alpha = 0.12f) else Color.Transparent,
+                                    if (active) colors.accent.copy(alpha = 0.12f) else Color.Transparent,
                                     shapes.controlInCard,
                                 )
+                                .clickable { selectedDaYun = d.index }
                                 .padding(vertical = MagicSpacing.md),
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
-                            Text("${d.startAge}岁", fontSize = MagicType.caption.sp, color = colors.tertiaryText)
+                            Text(
+                                text = "${d.startAge}岁",
+                                fontSize = MagicType.caption.sp,
+                                color = if (active) colors.accent else colors.tertiaryText,
+                            )
                             Text(
                                 text = d.ganZhi,
                                 fontSize = MagicType.body.sp,
                                 fontWeight = FontWeight.SemiBold,
-                                color = if (d.index == 1) colors.accent else colors.primaryText,
+                                color = if (active) colors.accent else colors.primaryText,
                             )
                             Text("${d.startYear}", fontSize = MagicType.caption.sp, color = colors.tertiaryText)
                             Text(
@@ -255,6 +272,81 @@ fun BaziScreen(scrollState: ScrollState) {
                             )
                         }
                     }
+                }
+
+                // ── 选中大运的十个流年 ──
+                val activePeriod = c.daYun.firstOrNull { it.index == selectedDaYun }
+                if (activePeriod != null) {
+                    val years = LiuNianService.ofDaYun(c, activePeriod)
+
+                    Spacer(Modifier.height(MagicSpacing.cardPadding))
+                    MagicDivider()
+                    Spacer(Modifier.height(MagicSpacing.md))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = "${activePeriod.ganZhi}运",
+                            fontSize = MagicType.subheadline.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colors.accent,
+                        )
+                        Spacer(Modifier.width(MagicSpacing.sm))
+                        Text(
+                            text = "${activePeriod.startAge}–${activePeriod.endAge} 岁　" +
+                                "${activePeriod.startYear}–${activePeriod.endYear}",
+                            fontSize = MagicType.caption.sp,
+                            color = colors.tertiaryText,
+                        )
+                    }
+                    Spacer(Modifier.height(MagicSpacing.md))
+
+                    // 五个一行的网格：十年刚好两行，不用横向滚动
+                    years.chunked(5).forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(MagicSpacing.sm),
+                        ) {
+                            row.forEach { ln ->
+                                Column(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .background(
+                                            colors.accent.copy(alpha = 0.06f),
+                                            shapes.controlInCard,
+                                        )
+                                        .padding(vertical = MagicSpacing.sm),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                ) {
+                                    Text(
+                                        text = "${ln.year}",
+                                        fontSize = MagicType.caption.sp,
+                                        color = colors.tertiaryText,
+                                    )
+                                    Text(
+                                        text = ln.ganZhi.toString(),
+                                        fontSize = MagicType.subheadline.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = colors.primaryText,
+                                    )
+                                    Text(
+                                        text = ln.shiShen,
+                                        fontSize = MagicType.caption.sp,
+                                        color = colors.secondaryText,
+                                    )
+                                    Text(
+                                        text = "${ln.age}岁",
+                                        fontSize = MagicType.caption.sp,
+                                        color = colors.tertiaryText,
+                                    )
+                                }
+                            }
+                            // 补空格，保证最后一行也是五等分对齐
+                            repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
+                        }
+                        Spacer(Modifier.height(MagicSpacing.sm))
+                    }
+
+                    MagicCaption("流年干支按「公元 4 年为甲子」推得；十神相对日主 ${c.dayMaster.label} 判定。")
                 }
             }
 
