@@ -464,6 +464,20 @@ private fun HexagramCard(chart: LiuYaoChart) {
         MagicDivider()
         Spacer(Modifier.height(MagicSpacing.md))
 
+        // ── 顶部信息表 ──
+        //
+        // 参照通行六爻排盘：起卦的基本条件要先摆出来，
+        // 断卦时月建、日辰、旬空是判断旺衰生克的基准，不能埋在正文里。
+        //
+        // 缺的两项（节气、神煞）当前 LiuYaoChart 里没有字段，未做。
+        InfoRow("事项", chart.question.ifBlank { "未填写" })
+        InfoRow("月建", "${chart.monthBranch.label}月")
+        InfoRow("日辰", "${chart.dayGanZhi}　旬空 ${chart.xunKong.first.label}${chart.xunKong.second.label}")
+        InfoRow("卦式", chart.palace.summary)
+        Spacer(Modifier.height(MagicSpacing.cardPadding))
+        MagicDivider()
+        Spacer(Modifier.height(MagicSpacing.md))
+
         Row(modifier = Modifier.fillMaxWidth()) {
             MagicHeaderCell("六神", weight = YaoCols.SHEN)
             MagicHeaderCell("六亲", weight = YaoCols.QIN)
@@ -485,6 +499,26 @@ private fun HexagramCard(chart: LiuYaoChart) {
 
         Spacer(Modifier.height(MagicSpacing.md))
         MagicCaption("世应、六亲、六神、旬空均由算法推出；伏神取本宫首卦同爻位。")
+    }
+}
+
+/** 信息表的一行：左侧标签定宽，右侧内容可换行。 */
+@Composable
+private fun InfoRow(label: String, value: String) {
+    val colors = LocalMagicColors.current
+    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)) {
+        Text(
+            text = label,
+            fontSize = MagicType.footnote.sp,
+            color = colors.tertiaryText,
+            modifier = Modifier.width(56.dp),
+        )
+        Text(
+            text = value,
+            fontSize = MagicType.footnote.sp,
+            color = colors.primaryText,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 
