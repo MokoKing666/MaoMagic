@@ -257,9 +257,18 @@ private fun QuestionRow(
     }
 }
 
+private fun poleName(letter: Char): String = when (letter) {
+    'E' -> "外向"; 'I' -> "内向"
+    'S' -> "实感"; 'N' -> "直觉"
+    'T' -> "思考"; 'F' -> "情感"
+    'J' -> "判断"; 'P' -> "知觉"
+    else -> letter.toString()
+}
+
 @Composable
 private fun ResultCard(chart: PersonalityChart, onRetake: () -> Unit) {
     val colors = LocalMagicColors.current
+    val shapes = LocalMagicShapes.current
     val type = chart.type
 
     GlassCard {
@@ -288,21 +297,58 @@ private fun ResultCard(chart: PersonalityChart, onRetake: () -> Unit) {
         MagicDivider()
         Spacer(Modifier.height(MagicSpacing.md))
 
-        // 四维倾向
+        // ── 四维：两极分布条 ──
+        //
+        // 原实现用 MagicMetricBar(ratio = percent/100) 画「0 → 强度」的单向条，
+        // 语义是错的：percent 是「偏离中点的幅度」，不是「这一极占多少」。
+        // 而且 label 里塞「外向 E (20%)」这种长文本会被窄栏挤成竖排。
+        //
+        // 改成两极分布：第一极占比 = 50 + percent/2，第二极 = 50 − percent/2，
+        // 条从左填充第一极占比。这样「60 : 40」一眼能读出倾向与幅度。
         chart.scores.forEach { s ->
-            val pole = if (s.raw >= 0) s.dimension.first else s.dimension.second
-            val poleName = when (pole) {
-                'E' -> "外向"; 'I' -> "内向"
-                'S' -> "实感"; 'N' -> "直觉"
-                'T' -> "思考"; 'F' -> "情感"
-                'J' -> "判断"; else -> "知觉"
+            val firstPole = s.dimension.first
+            val secondPole = s.dimension.second
+            val firstShare = 50 + s.percent / 2
+            val secondShare = 100 - firstShare
+
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "${poleName(firstPole)} $firstPole",
+                    fontSize = MagicType.caption.sp,
+                    fontWeight = if (s.raw >= 0) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (s.raw >= 0) colors.accent else colors.tertiaryText,
+                )
+                Text(
+                    text = "$firstShare : $secondShare",
+                    fontSize = MagicType.caption.sp,
+                    color = colors.secondaryText,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = "${poleName(secondPole)} $secondPole",
+                    fontSize = MagicType.caption.sp,
+                    fontWeight = if (s.raw < 0) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (s.raw < 0) colors.accent else colors.tertiaryText,
+                )
             }
-            MagicMetricBar(
-                label = "$poleName $pole (${s.percent}%)",
-                ratio = s.percent / 100f,
-                color = colors.accent,
-            )
-            Spacer(Modifier.height(MagicSpacing.sm))
+            Spacer(Modifier.height(MagicSpacing.xs))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(shapes.pill)
+                    .background(colors.divider),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(firstShare / 100f)
+                        .fillMaxHeight()
+                        .clip(shapes.pill)
+                        .background(colors.accent),
+                )
+            }
+            Spacer(Modifier.height(MagicSpacing.md))
         }
 
         Spacer(Modifier.height(MagicSpacing.md))
