@@ -25,6 +25,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -478,13 +479,14 @@ private fun HexagramCard(chart: LiuYaoChart) {
         MagicDivider()
         Spacer(Modifier.height(MagicSpacing.md))
 
-        Row(modifier = Modifier.fillMaxWidth()) {
-            MagicHeaderCell("六神", weight = YaoCols.SHEN)
-            MagicHeaderCell("六亲", weight = YaoCols.QIN)
-            MagicHeaderCell("世应", weight = YaoCols.SHI)
-            MagicHeaderCell("本卦", weight = YaoCols.GUA)
-            Spacer(Modifier.width(YaoCols.GAP))
-            MagicHeaderCell("变卦", weight = YaoCols.BIAN)
+        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            MagicHeaderCell("六神", weight = 0f)
+            Spacer(Modifier.width(YaoWidth.SHEN - 8.dp))
+            MagicHeaderCell("本卦", weight = 1f)
+            Spacer(Modifier.width(YaoWidth.MARK))
+            Spacer(Modifier.width(YaoWidth.CHANGE))
+            Spacer(Modifier.width(YaoWidth.MARK))
+            MagicHeaderCell("变卦", weight = 1f)
         }
         Spacer(Modifier.height(MagicSpacing.xs))
         MagicDivider()
@@ -542,89 +544,114 @@ private fun YaoTableRow(line: LiuYaoLine) {
     val colors = LocalMagicColors.current
 
     Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = MagicSpacing.md),
-        // 必须是 Top：本卦列与变卦列行数不同，CenterVertically 会让爻线错位
-        verticalAlignment = Alignment.Top,
+        modifier = Modifier.fillMaxWidth().padding(vertical = MagicSpacing.sm),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
+        // ── 六神 ──
         Text(
             text = line.liuShen.label,
-            fontSize = MagicType.subheadline.sp,
+            fontSize = MagicType.footnote.sp,
             color = if (line.moving) colors.accent else colors.secondaryText,
-            modifier = Modifier.weight(YaoCols.SHEN),
+            modifier = Modifier.width(YaoWidth.SHEN),
         )
-        Text(
-            // 六亲 + 地支 + 五行（如「父母未土」）。
-            // 断卦看的是用神受生受克：六亲定是谁，地支定具体是哪一爻，
-            // 五行定生克关系 —— 三者缺一都要回去对照爻位，所以摆在一起。
-            // 参照通行排盘的写法「父未土 丁」，只是不缩写六亲、天干放卦列。
-            text = line.liuQin.label + line.naJia.branch.label + line.naJia.wuXing.label,
-            fontSize = MagicType.subheadline.sp,
-            fontWeight = FontWeight.Medium,
-            color = if (line.kong) colors.tertiaryText else colors.secondaryText,
-            modifier = Modifier.weight(YaoCols.QIN),
-        )
-        Box(modifier = Modifier.weight(YaoCols.SHI)) {
-            when (line.relation) {
-                YaoRelation.SHI -> MagicBadge("世", colors.accent)
-                YaoRelation.YING -> MagicBadge("应", colors.tertiaryText)
-                YaoRelation.NONE -> Unit
+
+        // ── 本卦侧：六亲 + 地支 + 五行，换行放干支与世应 ──
+        //
+        // 参照通行排盘的「官午火 丙 · 世」：六亲定是谁、地支定哪一爻、
+        // 五行定生克，三者必须同一视觉单元，否则断卦要来回对照爻位。
+        // 世应压在这一格末尾，不单独占列 —— 独立列会让整行被切得很碎。
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = line.liuQin.label + line.naJia.branch.label + line.naJia.wuXing.label,
+                fontSize = MagicType.footnote.sp,
+                fontWeight = FontWeight.Medium,
+                color = if (line.kong) colors.tertiaryText else colors.secondaryText,
+                maxLines = 1,
+            )
+            Text(
+                text = buildString {
+                    append(line.naJia.label)
+                    when (line.relation) {
+                        YaoRelation.SHI -> append(" · 世")
+                        YaoRelation.YING -> append(" · 应")
+                        YaoRelation.NONE -> Unit
+                    }
+                },
+                fontSize = MagicType.caption.sp,
+                fontWeight = if (line.relation == YaoRelation.NONE) FontWeight.Normal else FontWeight.SemiBold,
+                color = if (line.relation == YaoRelation.NONE) colors.tertiaryText else colors.accent,
+                maxLines = 1,
+            )
+            line.fuShen?.let { fs ->
+                Text(
+                    text = fs.label,
+                    fontSize = MagicType.caption.sp,
+                    color = colors.inauspicious,
+                    maxLines = 1,
+                )
             }
         }
 
-        YaoCell(
+        // ── 本卦爻符 ──
+        YaoMark(
             yang = line.yang,
-            ganZhi = line.naJia.label,
             tint = if (line.moving) colors.accent else colors.primaryText,
-            sub = line.fuShen?.label,
-            subColor = colors.inauspicious,
-            modifier = Modifier.weight(YaoCols.GUA),
+            modifier = Modifier.width(YaoWidth.MARK),
         )
 
-        Spacer(Modifier.width(YaoCols.GAP))
+        // ── 动爻标记：老阳 ○ / 老阴 × ──
+        Text(
+            text = if (line.moving) (if (line.yang) "○" else "×") else "",
+            fontSize = MagicType.caption.sp,
+            color = colors.accent,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.width(YaoWidth.CHANGE),
+        )
 
-        YaoCell(
+        // ── 变卦爻符：只有动爻才变，静爻与本站相同 ──
+        YaoMark(
             yang = line.bian?.let { !line.yang } ?: line.yang,
-            ganZhi = line.bian?.naJia?.label ?: "—",
-            tint = colors.secondaryText,
-            // 变卦侧同样标六亲+地支+五行：动爻变出的六亲才是「变出什么」的答案
-            sub = line.bian?.let { it.liuQin.label + it.naJia.branch.label + it.naJia.wuXing.label },
-            subColor = colors.tertiaryText,
-            modifier = Modifier.weight(YaoCols.BIAN),
+            tint = if (line.bian != null) colors.secondaryText else colors.divider,
+            modifier = Modifier.width(YaoWidth.MARK),
         )
+
+        // ── 变卦侧：变出的六亲 + 地支 + 五行 ──
+        //
+        // 只有动爻有内容；静爻留空占位，保证六行爻线对齐。
+        Column(modifier = Modifier.weight(1f)) {
+            line.bian?.let { b ->
+                Text(
+                    text = b.liuQin.label + b.naJia.branch.label + b.naJia.wuXing.label,
+                    fontSize = MagicType.footnote.sp,
+                    color = colors.secondaryText,
+                    maxLines = 1,
+                )
+                Text(
+                    text = b.naJia.label,
+                    fontSize = MagicType.caption.sp,
+                    color = colors.tertiaryText,
+                    maxLines = 1,
+                )
+            } ?: run {
+                // 静爻留空占位，保证六行爻符对齐
+                Text(text = " ", fontSize = MagicType.footnote.sp)
+                Text(text = " ", fontSize = MagicType.caption.sp)
+            }
+        }
     }
 }
 
+/** 卦盘的固定列宽。文本列用 weight，这几列必须定宽，否则六行爻符对不齐。 */
+private object YaoWidth {
+    val SHEN = 34.dp
+    val MARK = 40.dp
+    val CHANGE = 18.dp
+}
+
+/** 爻符：阳爻一整条，阴爻断开两段 */
 @Composable
-private fun YaoCell(
-    yang: Boolean,
-    ganZhi: String,
-    tint: Color,
-    sub: String?,
-    subColor: Color,
-    modifier: Modifier = Modifier,
-) {
-    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Box(modifier = Modifier.height(YaoLineSlot), contentAlignment = Alignment.CenterStart) {
-            YaoLine(
-                yang = yang,
-                color = tint,
-                modifier = Modifier.fillMaxWidth().height(6.dp),
-            )
-        }
-        Box(modifier = Modifier.height(YaoTextSlot)) {
-            Text(
-                text = ganZhi,
-                fontSize = MagicType.footnote.sp,
-                fontWeight = FontWeight.Medium,
-                color = tint,
-            )
-        }
-        Box(modifier = Modifier.height(YaoSubSlot)) {
-            if (sub != null) {
-                Text(text = sub, fontSize = MagicType.footnote.sp, color = subColor)
-            }
-        }
-    }
+private fun YaoMark(yang: Boolean, tint: Color, modifier: Modifier = Modifier) {
+    YaoLine(yang = yang, color = tint, modifier = modifier.height(6.dp))
 }
 
 /** 爻线：阳爻一整条，阴爻断开两段 */
