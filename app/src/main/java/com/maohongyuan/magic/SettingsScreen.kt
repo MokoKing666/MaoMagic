@@ -1,6 +1,7 @@
 package com.maohongyuan.magic
 
 import androidx.compose.foundation.ScrollState
+import com.maohongyuan.magic.designsystem.glass.MagicGlassToggle
 import com.maohongyuan.magic.designsystem.glass.MagicPageContent
 import com.maohongyuan.magic.designsystem.glass.MagicPageHeader
 
@@ -320,13 +321,18 @@ fun SettingsScreen(
 
         // ── 解卦引擎 ──
         Section("数据") {
-            MagicLabel("自动保存卦例")
-            Spacer(Modifier.height(MagicSpacing.row))
-            MagicSegmentedControl(
-                options = listOf("开", "关"),
-                selectedIndex = if (settings.autoSaveHistory) 0 else 1,
-                onSelect = { onChange(settings.copy(autoSaveHistory = it == 0)) },
-            )
+            // 布尔项用玻璃开关，不用「开/关」分段控件 ——
+            // 分段控件是给「多选一」的，二元开关用 Toggle 才符合直觉。
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                MagicLabel("自动保存卦例", modifier = Modifier.weight(1f))
+                MagicGlassToggle(
+                    selected = { settings.autoSaveHistory },
+                    onSelect = { onChange(settings.copy(autoSaveHistory = it)) },
+                )
+            }
             Spacer(Modifier.height(MagicSpacing.xs))
             MagicCaption("开启后每次起卦自动存入本机历史，不联网、不上传。")
 
