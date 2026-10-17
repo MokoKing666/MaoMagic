@@ -14,6 +14,7 @@ import com.maohongyuan.magic.core.data.DivinationRecord
 import com.maohongyuan.magic.core.data.DivinationRecordStore
 import com.maohongyuan.magic.core.calendar.DayInfo
 import com.maohongyuan.magic.core.hexagram.CoinThrow
+import com.maohongyuan.magic.core.hexagram.HexagramTable
 import com.maohongyuan.magic.core.hexagram.Divination
 import com.maohongyuan.magic.core.hexagram.DivinationMethod
 import com.maohongyuan.magic.core.hexagram.DivinationResult
@@ -44,6 +45,11 @@ data class LiuYaoUiState(
     /** 解卦结果 */
     val interpretation: Interpretation? = null,
     val interpreting: Boolean = false,
+    /**
+     * 正在查看的历史卦例 id。非 null 表示盘面来自历史记录，
+     * 此时**不再落库**，否则每看一次就多存一条。
+     */
+    val viewingRecordId: String? = null,
     /** 数字起卦的两个输入 */
     val numberA: String = "",
     val numberB: String = "",
@@ -303,6 +309,8 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
      * 又会在规则演进后与实际结果不一致。
      */
     private fun saveRecord(chart: LiuYaoChart, interpretation: Interpretation?) {
+        // 查看历史卦例时不落库 —— 否则每点开一次就多存一条重复记录
+        if (state.viewingRecordId != null) return
         val now = System.currentTimeMillis()
         val record = DivinationRecord(
             id = now.toString(),
@@ -317,6 +325,50 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
             headline = interpretation?.headline,
         )
         viewModelScope.launch { recordStore.add(record) }
+    }
+
+    /**
+     * 打开一条历史卦例。
+     *
+     * ⚠️ **必须用记录自己的时间还原日课，绝不能用今天。**
+     * 六爻断卦靠日辰、月建定旺衰；用今日日辰重算旧卦，结论会变，那是误导。
+     *
+     * 记录里虽然存了 `dayGanZhiIndex` / `monthBranchOrdinal`，
+     * 但 `createdAt` 能直接还原出当天日期，走历法重取更完整
+     * （月建、旬空、节气都对得上）。
+     */
+    fun openRecord(record: DivinationRecord) {
+        val date = java.time.Instant.ofEpochMilli(record.createdAt)
+            .atZone(java.time.ZoneId.systemDefault())
+            .toLocalDate()
+        val day = runCatching {
+            CalendarService.of(date.year, date.monthValue, date.dayOfMonth, 12)
+        }.getOrNull() ?: return
+        val hexagram = runCatching { HexagramTable.of(record.hexagramCode).hexagram }.getOrNull() ?: return
+
+        val result = DivinationResult(
+            hexagram = hexagram,
+            movingIndexes = record.movingIndexes.toSet(),
+            method = DivinationMethod.COIN,
+        )
+        state = state.copy(
+            question = record.question,
+            day = day,
+            result = result,
+            viewingRecordId = record.id,
+        )
+        buildChart(result)
+    }
+
+    /** 从历史卦例退回当前起卦（清掉历史标记，恢复今天的日课） */
+    fun exitRecord() {
+        state = state.copy(
+            viewingRecordId = null,
+            day = CalendarService.today(),
+            result = null,
+            chart = null,
+            interpretation = null,
+        )
     }
 
     private fun hourBranchOf(hour: Int): com.maohongyuan.magic.core.model.EarthlyBranch {

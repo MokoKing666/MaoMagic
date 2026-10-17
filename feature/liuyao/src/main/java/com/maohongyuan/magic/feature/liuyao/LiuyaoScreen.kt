@@ -162,6 +162,7 @@ fun LiuyaoScreen(scrollState: ScrollState) {
         if (state.history.isNotEmpty()) {
             HistoryCard(
                 records = state.history,
+                onOpen = vm::openRecord,
                 onDelete = vm::deleteRecord,
                 onClear = vm::clearHistory,
             )
@@ -982,6 +983,7 @@ private fun InterpretationCard(interpretation: Interpretation) {
 @Composable
 private fun HistoryCard(
     records: List<DivinationRecord>,
+    onOpen: (DivinationRecord) -> Unit,
     onDelete: (String) -> Unit,
     onClear: () -> Unit,
 ) {
@@ -1029,7 +1031,7 @@ private fun HistoryCard(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { pendingDeleteId = if (pending) null else record.id }
+                    .clickable { onOpen(record) }
                     .padding(vertical = MagicSpacing.md),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -1076,6 +1078,17 @@ private fun HistoryCard(
                     Spacer(Modifier.width(MagicSpacing.xs))
                     Text(text = mark.label, fontSize = MagicType.footnote.sp, color = verdictColor)
                 }
+
+                // 删除入口：单击行是「查看」，删除必须单独点，再走下面那行确认。
+                // 三个动作（看 / 点删除 / 确认）分得开，就不会误删。
+                Text(
+                    text = "删除",
+                    fontSize = MagicType.caption.sp,
+                    color = colors.tertiaryText,
+                    modifier = Modifier
+                        .clickable { pendingDeleteId = if (pending) null else record.id }
+                        .padding(start = MagicSpacing.sm, top = 4.dp, bottom = 4.dp),
+                )
             }
             if (pending) {
                 Row(
@@ -1092,7 +1105,7 @@ private fun HistoryCard(
                             .padding(horizontal = MagicSpacing.md, vertical = MagicSpacing.sm),
                     )
                     Text(
-                        text = "删除",
+                        text = "确认删除",
                         fontSize = MagicType.footnote.sp,
                         fontWeight = FontWeight.SemiBold,
                         color = colors.inauspicious,
@@ -1111,7 +1124,7 @@ private fun HistoryCard(
         }
 
         Spacer(Modifier.height(MagicSpacing.md))
-        MagicCaption("点按条目选择，再确认删除。记录仅存于本机，不上传任何数据。")
+        MagicCaption("点按条目查看当时的盘面（日课按记录时间还原）。右侧「删除」需二次确认。记录仅存于本机，不上传。")
     }
 }
 
