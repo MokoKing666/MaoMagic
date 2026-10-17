@@ -20,6 +20,9 @@ dependencies {
 
     // cn.6tail:lunar 1.7.7 (MIT) — 无第三方依赖，支持 Java 1.5+
     implementation(libs.lunar)
+    // Tyme（同作者 Kotlin 重写版）。迁移期与 lunar 并存 ——
+    // 先写对拍测试证明两库干支/节气结果一致，再删 lunar。
+    implementation(libs.tyme4kt)
 
     testImplementation(libs.junit)
 }
