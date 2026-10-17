@@ -47,18 +47,15 @@ fun MagicSystemCard(
 ) {
     val colors = LocalMagicColors.current
     val shapes = LocalMagicShapes.current
-    // 按压张力：玻璃被按下、朝手指方向拉伸、亮起光斑。
-    // 公式抄自 Kyant0/AndroidLiquidGlass 的 LiquidButton。
-    val press = rememberGlassPress()
-
-    // ⚠️ 手势必须挂在 GlassCard 的 modifier 上，不能挂在内部的 Row 上。
-    // 挂在内部时点击不生效 —— 实测过（顶部那个设置齿轮当初能用，
-    // 正是因为它把 clickable 挂在了 MagicGlassSurface 的 modifier 上）。
+    // 按压张力：直接用 LiquidButton 那套 ——
+    // 玻璃层 layerBlock 形变 + InteractiveHighlight 跟手高光。
+    // 卡片本身是 MagicGlassSurface，有自己的 backdrop，所以能用真·玻璃层形变，
+    // 不必退到 contentModifier（那会连内容一起缩放，不是「玻璃被按下」）。
     GlassCard(
-        modifier = modifier
-            .clip(shapes.card)
-            .then(press.contentModifier(onClick)),
+        modifier = modifier.clip(shapes.card),
         level = GlassLevel.Thin,
+        press = rememberGlassPress(),
+        onClick = onClick,
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

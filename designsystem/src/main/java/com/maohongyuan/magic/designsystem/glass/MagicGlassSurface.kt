@@ -100,6 +100,13 @@ fun MagicGlassSurface(
     level: GlassLevel = GlassLevel.Regular,
     backdrop: Backdrop? = null,
     shadow: Boolean = true,
+    /**
+     * 传入后启用 LiquidButton 那套按压：玻璃层形变（layerBlock）+ 跟手高光。
+     *
+     * 与 [onClick] 配合使用；只传 press 不传 onClick 时只做视觉反馈。
+     */
+    press: GlassPressState? = null,
+    onClick: (() -> Unit)? = null,
     content: @Composable BoxScope.() -> Unit,
 ) {
     val colors = LocalMagicColors.current
@@ -173,10 +180,31 @@ fun MagicGlassSurface(
         else -> null
     }
 
+    val pressModifier = if (press != null) {
+        Modifier
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = null,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .then(press.gestureModifier)
+            .then(press.highlightModifier)
+    } else {
+        modifier
+    }
+
     Box(
-        modifier = modifier.drawBackdrop(
+        modifier = (if (press != null) pressModifier else modifier).drawBackdrop(
             backdrop = resolvedBackdrop,
             shape = { shape },
+            // 玻璃层形变：只动玻璃，内容不动
+            layerBlock = press?.layerBlock(),
             effects = {
                 // 顺序：color filter ⇒ blur ⇒ lens
                 if (effective.blur > 0.dp) {
@@ -277,6 +305,9 @@ fun GlassCard(
     level: GlassLevel = GlassLevel.Regular,
     contentPadding: PaddingValues = PaddingValues(MagicSpacing.cardPadding),
     backdrop: Backdrop? = null,
+    /** 传入即启用 LiquidButton 式按压（玻璃层形变 + 跟手高光） */
+    press: GlassPressState? = null,
+    onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     MagicGlassSurface(
@@ -284,6 +315,8 @@ fun GlassCard(
         shape = LocalMagicShapes.current.card,
         level = level,
         backdrop = backdrop,
+        press = press,
+        onClick = onClick,
     ) {
         Column(
             modifier = Modifier

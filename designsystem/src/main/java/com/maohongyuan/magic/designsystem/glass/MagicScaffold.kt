@@ -166,16 +166,18 @@ fun MagicScaffold(
                             .windowInsetsPadding(WindowInsets.statusBars)
                             .padding(start = MagicSpacing.screenMargin, top = MagicSpacing.xs),
                     ) {
-                        // 按压反馈：玻璃被按下去 + 光斑，与九宫格卡片同一套公式
-                        val backPress = rememberGlassPress()
+                        // 按压：直接走 LiquidButton 那套 ——
+                        // 玻璃层 layerBlock 形变 + InteractiveHighlight 跟手高光。
+                        // 不用 contentModifier（那是给没有 backdrop 的内容玻璃兜底的）。
                         MagicGlassSurface(
                             modifier = Modifier
                                 .size(MagicScaffoldDefaults.IconButtonSize)
-                                .clip(LocalMagicShapes.current.pill)
-                                .then(backPress.contentModifier(onBack)),
+                                .clip(LocalMagicShapes.current.pill),
                             shape = LocalMagicShapes.current.pill,
                             level = GlassLevel.Thin,
                             shadow = false,
+                            press = rememberGlassPress(),
+                            onClick = onBack,
                         ) {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 MagicBackIcon(
