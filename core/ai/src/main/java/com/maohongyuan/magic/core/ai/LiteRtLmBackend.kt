@@ -14,6 +14,7 @@ import com.google.ai.edge.litertlm.NpuBrand
 import com.maohongyuan.magic.core.interpret.InferencePrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
 /**
@@ -82,7 +83,11 @@ class LiteRtLmBackend(
                 InferencePrefs.BackendPref.GPU -> add("GPU" to Backend.GPU())
                 InferencePrefs.BackendPref.CPU -> add("CPU" to Backend.CPU())
                 InferencePrefs.BackendPref.AUTO -> {
-                    // 只有模型声明支持 NPU、且声明的 NPU 品牌与设备匹配时才试
+                    // ⚠️ 探测结果**只用来决定要不要试 NPU**，绝不用来排除 GPU/CPU。
+                    //
+                    // 之前写成「模型没声明 GPU 就跳过 GPU」，结果模型声明的后端列表
+                    // 与运行时实际能起什么并不一致，导致整条端上链路直接失效、
+                    // 每次都落到基础模式。宁可多试一次，也不能少试。
                     val npuOk = preferNpu &&
                         declared?.supportsNpu == true &&
                         declared.npuBrandMatches(DeviceProfile.current())
@@ -90,7 +95,7 @@ class LiteRtLmBackend(
                         // NPU 运行时 .so 通常在应用的 nativeLibraryDir 下
                         add("NPU" to Backend.NPU(context.applicationInfo.nativeLibraryDir))
                     }
-                    if (declared?.supportsGpu != false) add("GPU" to Backend.GPU())
+                    add("GPU" to Backend.GPU())
                     add("CPU" to Backend.CPU())
                 }
             }
@@ -132,7 +137,18 @@ class LiteRtLmBackend(
      *
      * 这比按 SoC 型号或发布年份猜可靠得多：模型文件是权威来源。
      */
-    private fun probeModel(): ModelCapabilities? = runCatching {
+    private suspend fun probeModel(): ModelCapabilities? {
+        // 超时保护：ModelInfo.from 理论上只读元数据，但万一实现要扫全文件，
+        // 1.9 GB 会把整条链路卡死 —— 那表现就是「点了没反应」。
+        // 探测失败/超时只是少了 NPU 判断依据，不该影响 GPU/CPU 的尝试。
+        val t0 = System.currentTimeMillis()
+        val result = withTimeoutOrNull(3_000) { probeBlocking() }
+        Log.i(TAG, "元数据探测耗时 ${System.currentTimeMillis() - t0} ms，结果=${result != null}")
+        return result
+    }
+
+    private suspend fun probeBlocking(): ModelCapabilities? = withContext(Dispatchers.IO) {
+        runCatching {
         ModelInfo.from(modelFile.absolutePath).use { info ->
             ModelCapabilities(
                 backends = info.supportedBackends(Modality.TEXT).toSet(),
@@ -143,6 +159,7 @@ class LiteRtLmBackend(
             )
         }
     }.onFailure { Log.w(TAG, "读取模型元数据失败", it) }.getOrNull()
+    }
 
     /** 模型声明的能力摘要，供设置页展示 */
     data class ModelCapabilities(
