@@ -74,7 +74,7 @@ fun SettingsScreen(
     val colors = LocalMagicColors.current
 
     MagicPageContent(scrollState = scrollState) {
-        MagicPageHeader(title = "设置", subtitle = "外观 · 引擎 · 数据")
+        MagicPageHeader(title = "设置", subtitle = "引擎 · 智能解卦 · 外观 · 数据")
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(MagicSpacing.section),
@@ -337,6 +337,19 @@ fun SettingsScreen(
 
         // ── 关于 ──
         Section("关于") {
+            MagicLabel("端上 AI")
+            Spacer(Modifier.height(MagicSpacing.xs))
+            MagicCaption(
+                """解卦用的是 Google Gemma 4 E2B（指令微调版），跑在你自己手机上，不联网、不上传。
+
+算归算，说归说：用神、旺衰、旬空、动变爻全部由本地算法算出，
+模型只负责把已定的结论讲成人话，不参与任何判断。
+
+运行时 LiteRT-LM，加速走 GPU；
+NPU 需要芯片厂商的专有运行时，暂未接入。"""
+            )
+            Spacer(Modifier.height(MagicSpacing.cardPadding))
+
             MagicListRow(
                 title = "开源许可",
                 subtitle = "字体 · 库 · 协议",
