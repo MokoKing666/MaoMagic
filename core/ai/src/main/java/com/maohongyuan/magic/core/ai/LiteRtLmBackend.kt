@@ -6,7 +6,11 @@ import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Engine
+import com.google.ai.edge.litertlm.BackendType
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Modality
+import com.google.ai.edge.litertlm.ModelInfo
+import com.google.ai.edge.litertlm.NpuBrand
 import com.maohongyuan.magic.core.interpret.InferencePrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -63,6 +67,11 @@ class LiteRtLmBackend(
         }
         Log.i(TAG, "开始加载：${modelFile.absolutePath} (${modelFile.length() / 1048576} MB)")
 
+        // 先读模型自己声明的能力 —— 不要靠 SoC 型号或年份猜。
+        // ModelInfo.from() 只读元数据，不加载权重，开销很小。
+        val declared = probeModel()
+        Log.i(TAG, "模型声明：${declared?.toString() ?: "读取失败，按默认顺序尝试"}")
+
         // 用户手动选了后端就**只试那一个** —— 否则「选了 CPU 却偷偷用 GPU」，
         // 用户的选择就不可信。AUTO 才逐级尝试。
         val pref = InferencePrefs.backend
@@ -73,11 +82,15 @@ class LiteRtLmBackend(
                 InferencePrefs.BackendPref.GPU -> add("GPU" to Backend.GPU())
                 InferencePrefs.BackendPref.CPU -> add("CPU" to Backend.CPU())
                 InferencePrefs.BackendPref.AUTO -> {
-                    if (preferNpu) {
+                    // 只有模型声明支持 NPU、且声明的 NPU 品牌与设备匹配时才试
+                    val npuOk = preferNpu &&
+                        declared?.supportsNpu == true &&
+                        declared.npuBrandMatches(DeviceProfile.current())
+                    if (npuOk) {
                         // NPU 运行时 .so 通常在应用的 nativeLibraryDir 下
                         add("NPU" to Backend.NPU(context.applicationInfo.nativeLibraryDir))
                     }
-                    add("GPU" to Backend.GPU())
+                    if (declared?.supportsGpu != false) add("GPU" to Backend.GPU())
                     add("CPU" to Backend.CPU())
                 }
             }
@@ -109,6 +122,53 @@ class LiteRtLmBackend(
         lastError = "后端 ${pref.name} 初始化失败"
         Log.e(TAG, lastError!!)
         false
+    }
+
+    /**
+     * 模型自己声明的能力。
+     *
+     * `ModelInfo.from()` 只解析元数据，不加载 1.9 GB 权重 —— 所以在下载完之后、
+     * 加载之前就能知道「这个模型支持哪些后端、要什么 NPU」。
+     *
+     * 这比按 SoC 型号或发布年份猜可靠得多：模型文件是权威来源。
+     */
+    private fun probeModel(): ModelCapabilities? = runCatching {
+        ModelInfo.from(modelFile.absolutePath).use { info ->
+            ModelCapabilities(
+                backends = info.supportedBackends(Modality.TEXT).toSet(),
+                npuBrand = runCatching { info.npuBrand(Modality.TEXT) }.getOrNull(),
+                socName = runCatching { info.socName(Modality.TEXT) }.getOrNull(),
+                minRuntime = info.minRuntimeVersion(),
+                maxContext = info.maxContextTokens(),
+            )
+        }
+    }.onFailure { Log.w(TAG, "读取模型元数据失败", it) }.getOrNull()
+
+    /** 模型声明的能力摘要，供设置页展示 */
+    data class ModelCapabilities(
+        val backends: Set<BackendType>,
+        val npuBrand: NpuBrand?,
+        val socName: String?,
+        val minRuntime: String?,
+        val maxContext: Int,
+    ) {
+        val supportsGpu: Boolean get() = BackendType.GPU in backends
+        val supportsNpu: Boolean get() = BackendType.NPU in backends
+
+        /** 声明的 NPU 品牌是否与本机一致 */
+        fun npuBrandMatches(device: DeviceProfile): Boolean = when (npuBrand) {
+            null, NpuBrand.UNKNOWN -> true          // 模型没限定，交给运行时判断
+            NpuBrand.MEDIATEK -> device.socManufacturer.contains("MediaTek", true)
+            NpuBrand.QUALCOMM -> device.isQualcomm
+            NpuBrand.GOOGLE_TENSOR -> device.socModel.contains("Tensor", true) ||
+                device.socManufacturer.contains("Google", true)
+            NpuBrand.SAMSUNG -> device.socManufacturer.contains("Samsung", true)
+            NpuBrand.INTEL -> false                 // 手机上没有 Intel NPU
+        }
+
+        override fun toString(): String =
+            "backends=$backends npuBrand=$npuBrand soc=$socName " +
+                "minRuntime=$minRuntime maxCtx=$maxContext"
     }
 
     override suspend fun isReady(): Boolean = engine != null
