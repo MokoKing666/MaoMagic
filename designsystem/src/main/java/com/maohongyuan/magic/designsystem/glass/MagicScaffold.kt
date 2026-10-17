@@ -2,7 +2,6 @@ package com.maohongyuan.magic.designsystem.glass
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -167,11 +166,13 @@ fun MagicScaffold(
                             .windowInsetsPadding(WindowInsets.statusBars)
                             .padding(start = MagicSpacing.screenMargin, top = MagicSpacing.xs),
                     ) {
+                        // 按压反馈：玻璃被按下去 + 光斑，与九宫格卡片同一套公式
+                        val backPress = rememberGlassPress()
                         MagicGlassSurface(
                             modifier = Modifier
                                 .size(MagicScaffoldDefaults.IconButtonSize)
                                 .clip(LocalMagicShapes.current.pill)
-                                .clickable(onClick = onBack),
+                                .then(backPress.contentModifier(onBack)),
                             shape = LocalMagicShapes.current.pill,
                             level = GlassLevel.Thin,
                             shadow = false,

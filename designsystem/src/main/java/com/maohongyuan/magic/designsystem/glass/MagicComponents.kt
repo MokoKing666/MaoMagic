@@ -331,10 +331,12 @@ fun MagicListRow(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalMagicColors.current
+    // 可点行也给按压反馈 —— 列表点了没反应会让人以为没点中
+    val press = if (onClick != null) rememberGlassPress() else null
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+            .then(if (press != null && onClick != null) press.contentModifier(onClick) else Modifier)
             .padding(vertical = MagicSpacing.md),
         verticalAlignment = Alignment.CenterVertically,
     ) {

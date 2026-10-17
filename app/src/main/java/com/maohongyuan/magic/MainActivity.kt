@@ -5,6 +5,13 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.Box
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.foundation.ScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -173,6 +180,31 @@ private fun MagicApp() {
             onBack = onBack,
             glassMode = glassMode,
         ) { scrollState ->
+            // ── 页面转场 ──
+            //
+            // 用 graphicsLayer 做「淡入 + 从右侧轻滑入」，而不是 AnimatedContent：
+            // 这个 when 分支读的是外层状态，AnimatedContent 的旧内容也会读到新状态，
+            // 结果是「新内容淡入两次」，看不到转场。
+            //
+            // 所以只动进入方向 —— 旧页直接让位，新页 260ms 内淡入并右移归位。
+            // 比硬切好得多，且不会出现状态错乱。
+            val pageKey = when {
+                board == AppTab.SETTINGS && showLicenses -> "licenses"
+                board == AppTab.SETTINGS -> "settings"
+                openSystem == null -> "board-${board.name}"
+                else -> "feature-${openSystem!!.name}"
+            }
+            val enter = remember { Animatable(1f) }
+            LaunchedEffect(pageKey) {
+                enter.snapTo(0f)
+                enter.animateTo(1f, tween(durationMillis = 260, easing = FastOutSlowInEasing))
+            }
+            Box(
+                modifier = Modifier.graphicsLayer {
+                    alpha = 0.25f + 0.75f * enter.value
+                    translationX = (1f - enter.value) * 28f.dp.toPx()
+                }
+            ) {
             when (board) {
                 AppTab.SETTINGS -> {
                     if (showLicenses) {
@@ -220,6 +252,7 @@ private fun MagicApp() {
                         )
                     }
                 }
+            }
             }
         }
     }
