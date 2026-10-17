@@ -22,6 +22,7 @@ include(":app")
 // ── 核心层 ─────────────────────────────────────────────────
 // 纯 JVM 模块（java-library）：禁止出现任何 android.* 导入
 include(":core:model")
+include(":core:resource")
 include(":core:calendar")
 include(":core:hexagram")
 include(":core:interpret")

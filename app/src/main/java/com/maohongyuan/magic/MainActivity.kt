@@ -41,6 +41,19 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // ── 资源基建探针 ──
+        // 验证纯 JVM 模块（java-library）的 src/main/resources 经 AGP 打进 APK 后，
+        // 运行期还能不能用 getResourceAsStream 读到。
+        // 本仓库此前从未用过资源文件，这条属于「业界通行说法」而非既成事实，
+        // 因此用一次启动探针把它变成可验证的事实。读不到就说明塔罗/人格的资源方案要换。
+        runCatching {
+            val ok = com.maohongyuan.magic.core.resource.JsonResource.exists("/probe.json")
+            android.util.Log.i("MagicResourceProbe", "probe.json readable = $ok")
+        }.onFailure {
+            android.util.Log.e("MagicResourceProbe", "探针异常", it)
+        }
+
         enableEdgeToEdge()
         setContent {
             MagicTheme {

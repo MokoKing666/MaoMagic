@@ -118,6 +118,7 @@ dependencies {
     // 核心层
     implementation(project(":core:data"))
     implementation(project(":core:ai"))
+    implementation(project(":core:resource"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

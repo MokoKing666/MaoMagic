@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "note": "探针资源：只用于验证纯 JVM 模块的 src/main/resources 能否被 JVM 单测与 Android 运行期读到。不承载业务数据。",
+  "expected": "resource-ok"
+}
