@@ -64,11 +64,15 @@ data class GlassLevel(
          * 悬浮控件比内容卡片更透是**审美**诉求，不能凌驾于可读性之上。
          */
         val Thick = GlassLevel(
-            blur = 24.dp,
-            lensHeight = 24.dp,
-            lensAmount = 48.dp,
-            surfaceAlphaLight = 0.62f,
-            surfaceAlphaDark = 0.11f,
+            // blur 8dp / lens 12·24 —— 照抄 Kyant0 LiquidBottomTabs 与 LiquidButton。
+            // 原来 blur 24dp 是「三倍厚度」，玻璃被糊成磨砂，反而不像玻璃。
+            blur = 8.dp,
+            lensHeight = 12.dp,
+            lensAmount = 24.dp,
+            // 遮罩从 0.62 降到 0.34：0.62 的白把折射盖掉了，
+            // 玻璃感来自 lens 的折射，不是靠糊一层白。
+            surfaceAlphaLight = 0.34f,
+            surfaceAlphaDark = 0.06f,
         )
 
         /**
@@ -79,11 +83,11 @@ data class GlassLevel(
          * blur 24 + 高饱和 是玻璃质感的来源，靠它保住「玻璃感」而不是靠降低不透明度。
          */
         val Regular = GlassLevel(
-            blur = 24.dp,
-            lensHeight = 16.dp,
-            lensAmount = 32.dp,
-            surfaceAlphaLight = 0.62f,
-            surfaceAlphaDark = 0.08f,
+            blur = 8.dp,
+            lensHeight = 12.dp,
+            lensAmount = 24.dp,
+            surfaceAlphaLight = 0.34f,
+            surfaceAlphaDark = 0.05f,
         )
 
         /**
