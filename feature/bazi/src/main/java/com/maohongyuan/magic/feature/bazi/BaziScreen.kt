@@ -111,14 +111,17 @@ fun BaziScreen(scrollState: ScrollState) {
     }
 
     MagicPageContent(scrollState = scrollState) {
-        MagicPageHeader(title = "八字命盘", subtitle = "四柱 · 十神 · 大运流年")
+        MagicPageHeader(title = "八字命盘", subtitle = "四柱 · 十神 · 大运")
 
         // ── 生辰 ──
         GlassCard {
             MagicSectionTitle("生辰")
+            Spacer(Modifier.height(MagicSpacing.xs))
+            // 输入口径必须写明 —— 公历/农历填错会整盘皆错，这是最容易踩的坑
+            MagicCaption("请填【公历（阳历）】出生时间，不是农历。下方会自动换算成农历与干支。")
             Spacer(Modifier.height(MagicSpacing.md))
             Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
-                FieldBox("年", year, { year = it }, Modifier.weight(1.4f))
+                FieldBox("公历年", year, { year = it }, Modifier.weight(1.4f))
                 FieldBox("月", month, { month = it }, Modifier.weight(1f))
                 FieldBox("日", day, { day = it }, Modifier.weight(1f))
                 FieldBox("时", hour, { hour = it }, Modifier.weight(1f))
@@ -152,6 +155,13 @@ fun BaziScreen(scrollState: ScrollState) {
                     MagicSectionTitle("四柱", modifier = Modifier.weight(1f))
                     MagicBadge(c.eightCharLabel, colors.accent)
                 }
+                Spacer(Modifier.height(MagicSpacing.xs))
+                // 回显换算结果：用户一眼就能确认公历填得对不对
+                MagicCaption(
+                    "公历 ${c.solar.ymd} ${c.solar.hour}时 · " +
+                        "农历 ${c.lunar.yearGanZhi}年${c.lunar.monthLabel}${c.lunar.dayLabel}" +
+                        if (c.lunar.isLeapMonth) "（闰月）" else ""
+                )
                 Spacer(Modifier.height(MagicSpacing.md))
 
                 Row(modifier = Modifier.fillMaxWidth()) {

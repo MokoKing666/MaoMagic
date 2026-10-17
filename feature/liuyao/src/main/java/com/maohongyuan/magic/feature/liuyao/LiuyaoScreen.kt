@@ -499,9 +499,9 @@ private object YaoCols {
 }
 
 // 单元格固定三槽：没有内容也占位，保证六行爻线落在同一组水平线上
-private val YaoLineSlot = 20.dp
-private val YaoTextSlot = 18.dp
-private val YaoSubSlot = 16.dp
+private val YaoLineSlot = 22.dp
+private val YaoTextSlot = 22.dp
+private val YaoSubSlot = 20.dp
 
 @Composable
 private fun YaoTableRow(line: LiuYaoLine) {
@@ -514,13 +514,14 @@ private fun YaoTableRow(line: LiuYaoLine) {
     ) {
         Text(
             text = line.liuShen.label,
-            fontSize = MagicType.footnote.sp,
-            color = colors.tertiaryText,
+            fontSize = MagicType.subheadline.sp,
+            color = if (line.moving) colors.accent else colors.secondaryText,
             modifier = Modifier.weight(YaoCols.SHEN),
         )
         Text(
-            text = line.liuQin.label,
-            fontSize = MagicType.footnote.sp,
+            // 六亲 + 五行：断卦看的就是用神受生受克，五行必须直接摆在眼前
+            text = line.liuQin.label + line.naJia.wuXing.label,
+            fontSize = MagicType.subheadline.sp,
             fontWeight = FontWeight.Medium,
             color = if (line.kong) colors.tertiaryText else colors.secondaryText,
             modifier = Modifier.weight(YaoCols.QIN),
@@ -548,7 +549,7 @@ private fun YaoTableRow(line: LiuYaoLine) {
             yang = line.bian?.let { !line.yang } ?: line.yang,
             ganZhi = line.bian?.naJia?.label ?: "—",
             tint = colors.secondaryText,
-            sub = line.bian?.liuQin?.label,
+            sub = line.bian?.let { it.liuQin.label + it.naJia.wuXing.label },
             subColor = colors.tertiaryText,
             modifier = Modifier.weight(YaoCols.BIAN),
         )
@@ -573,11 +574,16 @@ private fun YaoCell(
             )
         }
         Box(modifier = Modifier.height(YaoTextSlot)) {
-            Text(text = ganZhi, fontSize = MagicType.caption.sp, fontWeight = FontWeight.Medium, color = tint)
+            Text(
+                text = ganZhi,
+                fontSize = MagicType.footnote.sp,
+                fontWeight = FontWeight.Medium,
+                color = tint,
+            )
         }
         Box(modifier = Modifier.height(YaoSubSlot)) {
             if (sub != null) {
-                Text(text = sub, fontSize = MagicType.caption.sp, color = subColor)
+                Text(text = sub, fontSize = MagicType.footnote.sp, color = subColor)
             }
         }
     }
