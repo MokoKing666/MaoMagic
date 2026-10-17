@@ -125,7 +125,16 @@ fun MagicGlassSurface(
     // 亮色：白 0.62 —— 遮住背景，保证正文 ≥ 4.5:1。
     // 深色：白 0.07 —— 只做轻微抬升；可读性由 backdrop 自身不透明（首行 drawRect）保证，
     //       不靠表面色去遮。两者机制不同，数值不可互换。
-    val surfaceColor = Color.White.copy(alpha = surfaceAlpha)
+    // ⚠️ 遮罩颜色必须跟主题走，不能永远是白。
+    //
+    // 照抄 Kyant0 LiquidBottomTabs：
+    //   亮色  Color(0xFFFAFAFA).copy(0.4f)   近白
+    //   深色  Color(0xFF121212).copy(0.4f)   近黑
+    //
+    // 我们原来深色也盖白 —— 结果深色玻璃被「提亮」成一层灰雾，
+    // 既不通透也不像玻璃。深色玻璃该往「更深」走，不是往「更白」走。
+    val surfaceColor = (if (colors.isLight) Color(0xFFFAFAFA) else Color(0xFF121212))
+        .copy(alpha = surfaceAlpha)
 
     // ── OFF：完全放弃 backdrop，改用实色表面，性能最省 ──
     if (mode == GlassMode.OFF) {

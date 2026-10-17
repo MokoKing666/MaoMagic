@@ -72,7 +72,7 @@ data class GlassLevel(
             // 遮罩从 0.62 降到 0.34：0.62 的白把折射盖掉了，
             // 玻璃感来自 lens 的折射，不是靠糊一层白。
             surfaceAlphaLight = 0.34f,
-            surfaceAlphaDark = 0.06f,
+            surfaceAlphaDark = 0.40f,
         )
 
         /**
@@ -87,7 +87,7 @@ data class GlassLevel(
             lensHeight = 12.dp,
             lensAmount = 24.dp,
             surfaceAlphaLight = 0.34f,
-            surfaceAlphaDark = 0.05f,
+            surfaceAlphaDark = 0.40f,
         )
 
         /**
