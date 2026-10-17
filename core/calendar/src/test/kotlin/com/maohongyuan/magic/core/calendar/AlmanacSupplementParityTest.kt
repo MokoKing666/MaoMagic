@@ -61,6 +61,9 @@ class AlmanacSupplementParityTest {
             pos.forEachIndexed { i, p ->
                 check(p.name, d, "${lunarPos[i].first}/${lunarPos[i].second}", "${p.direction}/${p.description}")
             }
+            check("宿吉凶", d, l.xiuLuck, AlmanacSupplement.xiuLuck(l.xiu))
+            check("农历月名", d, l.monthInChinese, AlmanacSupplement.monthName(kotlin.math.abs(l.month)))
+            check("农历日名", d, l.dayInChinese, AlmanacSupplement.dayName(l.day))
             n++
         }
         assertTrue("只比了 $n 天", n >= 700)

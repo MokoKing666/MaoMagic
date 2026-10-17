@@ -110,6 +110,40 @@ object AlmanacSupplement {
         POSITIONS.getValue(dayStem).mapIndexed { i, (gua, dir) ->
             PositionInfo(POSITION_NAMES[i], gua, dir)
         }
+    /**
+     * 二十八宿吉凶。
+     *
+     * tyme 只给宿名，不给吉凶 —— 这张表 lunar 有，我们照抄（28 项，逐日对拍验证）。
+     *
+     * 二十八宿按圆序排列：角亢氐房心尾箕斗牛女虚危室壁奎娄胃昴毕觜参井鬼柳星张翼轸。
+     */
+    private val XIU_LUCK: Map<String, String> = mapOf(
+        "角" to "吉", "亢" to "凶", "氐" to "凶", "房" to "吉",
+        "心" to "凶", "尾" to "吉", "箕" to "吉", "斗" to "吉",
+        "牛" to "凶", "女" to "凶", "虚" to "凶", "危" to "凶",
+        "室" to "吉", "壁" to "吉", "奎" to "凶", "娄" to "吉",
+        "胃" to "吉", "昴" to "凶", "毕" to "吉", "觜" to "凶",
+        "参" to "吉", "井" to "吉", "鬼" to "凶", "柳" to "凶",
+        "星" to "凶", "张" to "吉", "翼" to "凶", "轸" to "吉",
+    )
+
+    fun xiuLuck(xiuName: String): String = XIU_LUCK[xiuName] ?: ""
+
+    /** 农历月名。1..12 → 正/二/…/十/冬/腊。闰月由调用方加「闰」字。 */
+    private val MONTH_NAMES = listOf(
+        "正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊",
+    )
+
+    fun monthName(month: Int): String = MONTH_NAMES.getOrElse(month - 1) { "$month" }
+
+    /** 农历日名。初一…初十、十一…十九、二十、廿一…廿九、三十。 */
+    private val DAY_NAMES = listOf(
+        "初一", "初二", "初三", "初四", "初五", "初六", "初七", "初八", "初九", "初十",
+        "十一", "十二", "十三", "十四", "十五", "十六", "十七", "十八", "十九", "二十",
+        "廿一", "廿二", "廿三", "廿四", "廿五", "廿六", "廿七", "廿八", "廿九", "三十",
+    )
+
+    fun dayName(day: Int): String = DAY_NAMES.getOrElse(day - 1) { "$day" }
 }
 
 /** 日冲：描述串（如「(己巳)蛇」）与生肖（如「蛇」） */
