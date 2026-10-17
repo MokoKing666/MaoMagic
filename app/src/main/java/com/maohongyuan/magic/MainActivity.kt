@@ -34,6 +34,7 @@ import com.maohongyuan.magic.feature.almanac.AlmanacScreen
 import com.maohongyuan.magic.feature.bazi.BaziScreen
 import com.maohongyuan.magic.feature.liuyao.LiuyaoScreen
 import com.maohongyuan.magic.feature.meihua.MeihuaScreen
+import com.maohongyuan.magic.feature.xiaoliuren.XiaoLiuRenScreen
 import com.maohongyuan.magic.navigation.AppTab
 import com.maohongyuan.magic.navigation.SystemId
 import kotlinx.coroutines.launch
@@ -211,6 +212,7 @@ private fun FeatureHost(
         SystemId.LIUYAO -> LiuyaoScreen(scrollState)
         SystemId.BAZI -> BaziScreen(scrollState)
         SystemId.MEIHUA -> MeihuaScreen(scrollState)
+        SystemId.XIAOLIUREN -> XiaoLiuRenScreen(scrollState)
         SystemId.ALMANAC -> AlmanacScreen(
             scrollState = scrollState,
             // 日运尚未实现时不显示这条动线 —— 宁可没有入口，

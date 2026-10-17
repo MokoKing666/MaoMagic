@@ -119,6 +119,7 @@ dependencies {
     implementation(project(":core:data"))
     implementation(project(":core:ai"))
     implementation(project(":core:resource"))
+    implementation(project(":feature:xiaoliuren"))
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
