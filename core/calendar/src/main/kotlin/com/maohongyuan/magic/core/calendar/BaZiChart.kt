@@ -2,12 +2,15 @@ package com.maohongyuan.magic.core.calendar
 
 import com.maohongyuan.magic.core.model.DivinationChart
 import com.maohongyuan.magic.core.model.DivinationSystem
-
 import com.maohongyuan.magic.core.model.EarthlyBranch
 import com.maohongyuan.magic.core.model.GanZhi
 import com.maohongyuan.magic.core.model.HeavenlyStem
 import com.maohongyuan.magic.core.model.WuXing
-import com.nlf.calendar.Solar
+import com.tyme.eightchar.ChildLimit
+import com.tyme.eightchar.DecadeFortune
+import com.tyme.eightchar.EightChar
+import com.tyme.sixtycycle.SixtyCycle
+import com.tyme.solar.SolarTime
 
 enum class Gender(val label: String) {
     MALE("男"),
@@ -49,7 +52,6 @@ data class DaYunPeriod(
     val ganZhi: String,
     val xunKong: String,
 ) {
-    /** 该步大运的天干十神（相对日主）。由调用方按需计算，此处只给干支。 */
     val label: String get() = "$startAge–$endAge 岁"
 }
 
@@ -99,30 +101,12 @@ data class BaZiChart(
 /**
  * 八字排盘。
  *
- * 同样把 lunar 库封装在内部。
+ * 同样把 tyme 库封装在内部。
+ *
+ * 十神 / 藏干 / 地势 tyme 没有，由 [BaZiSupplement] 自研
+ * （已拿 lunar 当 oracle 对拍 730 天零差异）。
  */
 object BaZiService {
-
-    /** 由 lunar 返回的字符串构造一柱。天干地支解析失败时退回甲子，保证不崩。 */
-    private fun buildPillar(
-        label: String,
-        ganLabel: String,
-        zhiLabel: String,
-        hideGanRaw: List<String>,
-        naYin: String,
-        shiShenGan: String,
-        shiShenZhi: List<String>,
-        diShi: String,
-    ): Pillar = Pillar(
-        label = label,
-        gan = HeavenlyStem.ofLabel(ganLabel) ?: HeavenlyStem.JIA,
-        zhi = EarthlyBranch.ofLabel(zhiLabel) ?: EarthlyBranch.ZI,
-        hideGan = hideGanRaw.mapNotNull { HeavenlyStem.ofLabel(it) },
-        naYin = naYin,
-        shiShenGan = shiShenGan,
-        shiShenZhi = shiShenZhi,
-        diShi = diShi,
-    )
 
     /**
      * 排盘。
@@ -139,42 +123,23 @@ object BaZiService {
         gender: Gender = Gender.MALE,
         daYunCount: Int = 8,
     ): BaZiChart {
-        val solar = Solar.fromYmdHms(year, month, day, hour, minute, 0)
-        val lunar = solar.lunar
-        val ec = lunar.eightChar
-
-        val built = listOf(
-            buildPillar(
-                label = "年柱",
-                ganLabel = ec.yearGan, zhiLabel = ec.yearZhi,
-                hideGanRaw = ec.yearHideGan,
-                naYin = ec.yearNaYin, shiShenGan = ec.yearShiShenGan,
-                shiShenZhi = ec.yearShiShenZhi, diShi = ec.yearDiShi,
-            ),
-            buildPillar(
-                label = "月柱",
-                ganLabel = ec.monthGan, zhiLabel = ec.monthZhi,
-                hideGanRaw = ec.monthHideGan,
-                naYin = ec.monthNaYin, shiShenGan = ec.monthShiShenGan,
-                shiShenZhi = ec.monthShiShenZhi, diShi = ec.monthDiShi,
-            ),
-            buildPillar(
-                label = "日柱",
-                ganLabel = ec.dayGan, zhiLabel = ec.dayZhi,
-                hideGanRaw = ec.dayHideGan,
-                naYin = ec.dayNaYin, shiShenGan = ec.dayShiShenGan,
-                shiShenZhi = ec.dayShiShenZhi, diShi = ec.dayDiShi,
-            ),
-            buildPillar(
-                label = "时柱",
-                ganLabel = ec.timeGan, zhiLabel = ec.timeZhi,
-                hideGanRaw = ec.timeHideGan,
-                naYin = ec.timeNaYin, shiShenGan = ec.timeShiShenGan,
-                shiShenZhi = ec.timeShiShenZhi, diShi = ec.timeDiShi,
-            ),
+        val time = SolarTime(year, month, day, hour, minute, 0)
+        val solarDay = time.getSolarDay()
+        val cycleDay = solarDay.getSixtyCycleDay()
+        val ec = EightChar(
+            cycleDay.getYear(),
+            cycleDay.getMonth(),
+            cycleDay.getSixtyCycle(),
+            cycleDay.getHours()[((hour + 1) / 2) % 12].getSixtyCycle(),
         )
 
-        val dayMaster = built[2].gan
+        val dayMaster = toStem(ec.getDay())
+        val built = listOf(
+            buildPillar("年柱", ec.getYear(), dayMaster),
+            buildPillar("月柱", ec.getMonth(), dayMaster),
+            buildPillar("日柱", ec.getDay(), dayMaster, isDayMaster = true),
+            buildPillar("时柱", ec.getHour(), dayMaster),
+        )
 
         // 五行统计：只计 4 干 + 4 支，不含藏干 —— 这是最通行的口径
         val counts = WuXing.entries.associateWith { 0 }.toMutableMap()
@@ -183,41 +148,45 @@ object BaZiService {
             counts[pillar.zhi.wuXing] = counts.getValue(pillar.zhi.wuXing) + 1
         }
 
-        val yun = ec.getYun(if (gender == Gender.MALE) 1 else 0)
-        val daYun = yun.daYun
-            .drop(1) // 第 0 步是「起运前」，不展示
-            .take(daYunCount)
-            .map { d ->
+        val child = ChildLimit(time, if (gender == Gender.MALE) com.tyme.enums.Gender.MAN else com.tyme.enums.Gender.WOMAN)
+        val daYun = (0 until daYunCount).mapNotNull { i ->
+            runCatching { DecadeFortune.fromChildLimit(child, i) }.getOrNull()?.let { d ->
                 DaYunPeriod(
-                    index = d.index,
-                    startAge = d.startAge,
-                    endAge = d.endAge,
-                    startYear = d.startYear,
-                    endYear = d.endYear,
-                    ganZhi = d.ganZhi,
-                    xunKong = d.xunKong,
+                    index = i + 1,
+                    startAge = d.getStartAge(),
+                    endAge = d.getEndAge(),
+                    startYear = d.getStartSixtyCycleYear().getYear(),
+                    endYear = d.getEndSixtyCycleYear().getYear(),
+                    ganZhi = d.getSixtyCycle().toString(),
+                    xunKong = xunKong(d.getSixtyCycle()),
                 )
             }
+        }
+
+        val lunarDay = solarDay.getLunarDay()
+        val lunarMonth = lunarDay.getLunarMonth()
+        val lunarYear = lunarMonth.getLunarYear()
+        val rawMonth = lunarMonth.getMonthWithLeap()
 
         return BaZiChart(
             solar = SolarInfo(
-                year = solar.year,
-                month = solar.month,
-                day = solar.day,
-                hour = solar.hour,
-                minute = solar.minute,
-                weekLabel = "星期${solar.weekInChinese}",
-                ymd = solar.toYmd(),
+                year = year,
+                month = month,
+                day = day,
+                hour = hour,
+                minute = minute,
+                weekLabel = "星期" + solarDay.getWeek().getName(),
+                ymd = "%04d-%02d-%02d".format(year, month, day),
             ),
             lunar = LunarInfo(
-                year = lunar.year,
-                month = kotlin.math.abs(lunar.month),
-                day = lunar.day,
-                isLeapMonth = lunar.month < 0,
-                monthLabel = "${if (lunar.month < 0) "闰" else ""}${lunar.monthInChinese}月",
-                dayLabel = lunar.dayInChinese,
-                yearGanZhi = lunar.yearInGanZhi,
-                zodiac = lunar.yearShengXiao,
+                year = lunarYear.year,
+                month = kotlin.math.abs(rawMonth),
+                day = lunarDay.day,
+                isLeapMonth = rawMonth < 0,
+                monthLabel = "${if (rawMonth < 0) "闰" else ""}${AlmanacSupplement.monthName(kotlin.math.abs(rawMonth))}月",
+                dayLabel = AlmanacSupplement.dayName(lunarDay.day),
+                yearGanZhi = lunarYear.getSixtyCycle().toString(),
+                zodiac = AlmanacSupplement.zodiac(EarthlyBranch.entries[lunarYear.getSixtyCycle().getEarthBranch().getIndex()]),
             ),
             gender = gender,
             year = built[0],
@@ -226,15 +195,60 @@ object BaZiService {
             hour = built[3],
             dayMaster = dayMaster,
             wuXingCount = counts,
-            taiYuan = ec.taiYuan,
-            taiYuanNaYin = ec.taiYuanNaYin,
-            mingGong = ec.mingGong,
-            mingGongNaYin = ec.mingGongNaYin,
-            shenGong = ec.shenGong,
-            shenGongNaYin = ec.shenGongNaYin,
-            startAge = yun.startYear,
-            forward = yun.isForward,
+            taiYuan = ec.getFetalOrigin().toString(),
+            taiYuanNaYin = ec.getFetalOrigin().getSound().getName(),
+            mingGong = ec.getOwnSign().toString(),
+            mingGongNaYin = ec.getOwnSign().getSound().getName(),
+            shenGong = ec.getBodySign().toString(),
+            shenGongNaYin = ec.getBodySign().getSound().getName(),
+            startAge = child.getYearCount(),
+            forward = child.isForward(),
             daYun = daYun,
         )
+    }
+
+    private fun toStem(cycle: SixtyCycle): HeavenlyStem =
+        HeavenlyStem.entries[cycle.getHeavenStem().getIndex()]
+
+    private fun toBranch(cycle: SixtyCycle): EarthlyBranch =
+        EarthlyBranch.entries[cycle.getEarthBranch().getIndex()]
+
+    private fun buildPillar(
+        label: String,
+        cycle: SixtyCycle,
+        dayMaster: HeavenlyStem,
+        isDayMaster: Boolean = false,
+    ): Pillar {
+        val gan = toStem(cycle)
+        val zhi = toBranch(cycle)
+        val hides = BaZiSupplement.hideStems(zhi)
+        return Pillar(
+            label = label,
+            gan = gan,
+            zhi = zhi,
+            hideGan = hides,
+            naYin = cycle.getSound().getName(),
+            // 日干自身按惯例显示「日主」，不叫「比肩」—— 日主是坐标原点
+            shiShenGan = if (isDayMaster) "日主" else BaZiSupplement.tenGod(dayMaster, gan),
+            shiShenZhi = hides.map { BaZiSupplement.tenGod(dayMaster, it) },
+            diShi = BaZiSupplement.terrain(dayMaster, zhi),
+        )
+    }
+
+    /**
+     * 旬空。
+     *
+     * 六旬各空两支：甲子旬空戌亥、甲戌旬空申酉、甲申旬空午未、
+     * 甲午旬空辰巳、甲辰旬空寅卯、甲寅旬空子丑。
+     */
+    private fun xunKong(cycle: SixtyCycle): String {
+        val s = cycle.getHeavenStem().getIndex()
+        val b = cycle.getEarthBranch().getIndex()
+        var idx = 0
+        for (i in 0 until 60) if (i % 10 == s && i % 12 == b) { idx = i; break }
+        // 六旬各空两支，首个空支 = (10 - 2 × 旬序) mod 12
+        val xun = idx / 10
+        val first = (10 - 2 * xun) % 12
+        return EarthlyBranch.entries[first].label + EarthlyBranch.entries[(first + 1) % 12].label
     }
 }
