@@ -7,6 +7,7 @@ import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.maohongyuan.magic.core.interpret.InferencePrefs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -62,14 +63,26 @@ class LiteRtLmBackend(
         }
         Log.i(TAG, "开始加载：${modelFile.absolutePath} (${modelFile.length() / 1048576} MB)")
 
+        // 用户手动选了后端就**只试那一个** —— 否则「选了 CPU 却偷偷用 GPU」，
+        // 用户的选择就不可信。AUTO 才逐级尝试。
+        val pref = InferencePrefs.backend
         val candidates = buildList {
-            if (preferNpu) {
-                // NPU 运行时 .so 通常在应用的 nativeLibraryDir 下
-                add("NPU" to Backend.NPU(context.applicationInfo.nativeLibraryDir))
+            when (pref) {
+                InferencePrefs.BackendPref.NPU ->
+                    add("NPU" to Backend.NPU(context.applicationInfo.nativeLibraryDir))
+                InferencePrefs.BackendPref.GPU -> add("GPU" to Backend.GPU())
+                InferencePrefs.BackendPref.CPU -> add("CPU" to Backend.CPU())
+                InferencePrefs.BackendPref.AUTO -> {
+                    if (preferNpu) {
+                        // NPU 运行时 .so 通常在应用的 nativeLibraryDir 下
+                        add("NPU" to Backend.NPU(context.applicationInfo.nativeLibraryDir))
+                    }
+                    add("GPU" to Backend.GPU())
+                    add("CPU" to Backend.CPU())
+                }
             }
-            add("GPU" to Backend.GPU())
-            add("CPU" to Backend.CPU())
         }
+        Log.i(TAG, "后端偏好=${pref.name}，候选=${candidates.map { it.first }}")
 
         for ((name, backend) in candidates) {
             val outcome = runCatching {
@@ -93,7 +106,7 @@ class LiteRtLmBackend(
             Log.w(TAG, "$name 后端失败，尝试下一个", outcome.exceptionOrNull())
         }
 
-        lastError = "所有后端都初始化失败（NPU/GPU/CPU）"
+        lastError = "后端 ${pref.name} 初始化失败"
         Log.e(TAG, lastError!!)
         false
     }

@@ -1,33 +1,43 @@
-fix(ai): 解析模型输出的 JSON，不再把花括号显示给用户
+fix(settings): 修「只能用基础模式」的回归；引擎分四档；后端可选
 
-用户截图显示解读栏是一整坨 JSON：verdict / headline / sections 原样渲染。
+## 1. 严重回归（我的责任）
+`MagicSettings.engineTier` 原来没人用，默认值写的是 "RULE"。
+我这次让降级链尊重它 —— 于是**所有用户被强制锁在基础模式**。
 
-## 根因
-ChartPrompt.SYSTEM_PROMPT 是给云端路径写的，里面**要求输出 JSON**。
-端上模型照做，而我的 OnDeviceInterpreter 把输出当纯文本渲染 ——
-PlainText.sanitize 只去 Markdown 标记，不去 JSON 结构。
+修：
+- 默认值改 "AUTO"
+- 存量迁移：读到 "RULE" 就改 "AUTO"。
+  理由：这个字段在加 UI 之前**没有任何入口能改它**，
+  所以存量 "RULE" 一定是旧默认，不可能是用户选择。
 
-## 改法：先解析，解析不了再退纯文本
-1. 截取第一个 { 到最后一个 } 之间的内容（模型常加前言）
-2. kotlinx.serialization 解析成 sections
-3. 成功 → 结构化段落（title/body/tone）
-4. 像 JSON 但解析失败 → **返回空 Flow 降级**，不把残缺 JSON 当正文
-5. 纯文本 → PlainText.sanitize
+## 2. 引擎分四档，本地与云端分开
+原来只有「基础模式 / 智能模式」两档，而「智能模式」实际是云端 AI ——
+本地模型根本没进选项，用户也分不清数据去哪、要不要联网。
 
-## 判词仍取算法结果
-模型的 JSON 里也有 verdict，但**一律用 request.facts 的 verdict 与 headline**。
-吉凶是算法算的，不能让模型改。只有 sections 是模型写的。
+现在：自动 / 基础 / 本地模型 / 云端 AI，各带一句说明：
+- 自动：优先本地，没下载用云端（若已配），再退回基础
+- 基础：只用规则引擎，离线、可复现、不占存储
+- 本地模型：手机自己算，完全不联网，需先下载 1.9 GB
+- 云端 AI：会联网
 
-## 用 kotlinx.serialization 而不是 org.json
-org.json 在 JVM 单测里是 Android 的空壳实现（returnDefaultValues 下全部返回
-null/0），测试根本测不了。kotlinx.serialization 本来就是依赖，且测试可跑。
+云端字段的显隐条件从 cloudAiEnabled 改为 engineTier == "CLOUD_AI"。
 
-## 单测 7 用例（OnDeviceParseTest）
-标准 JSON / 带前言 / 判词取算法 / 残缺 JSON 降级 / 纯文本清洗 /
-空输出 / sections 空数组
+## 3. 推理后端用户可选
+新增「推理后端」：自动 / NPU / GPU / CPU。
+手动选定时**只试那一个** —— 否则「选了 CPU 却偷偷用 GPU」，选择就不可信。
 
-## 顺带
-core:ai 加 testOptions.unitTests.isReturnDefaultValues = true ——
-否则 android.util.Log 在 JVM 单测里抛 not mocked。
+## 4. 如实标注 NPU 不可用
+实测 litertlm-android 0.18.0 的 AAR 里只有 liblitertlm_jni.so，
+**没有任何 NPU 运行时**；`com.google.ai.edge.litert:litert-npu` 在 Google Maven
+也是 404。联发科/高通的 NPU 运行时是专有 .so，只存在于 litert-samples 的
+目录里，不是 Maven 包。
+
+所以推荐 GPU 是对的。UI 上写明原因，避免「我是天玑旗舰为什么推荐 GPU」的困惑。
+
+## 5. 设置分区顺序
+解卦引擎 / 智能解卦 / 外观 / 配色 / 数据 / 关于 —— 把最常调的放最前。
+
+## 未做
+欢迎页。
 
 286 用例全绿。

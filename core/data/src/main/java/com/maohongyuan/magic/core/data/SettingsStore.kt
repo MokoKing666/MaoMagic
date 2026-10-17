@@ -49,5 +49,9 @@ class SettingsStore(private val context: Context) {
         if (raw.isNullOrBlank()) return MagicSettings.DEFAULT
         return runCatching { json.decodeFromString<MagicSettings>(raw) }
             .getOrDefault(MagicSettings.DEFAULT)
+        // 迁移：engineTier 早期的默认值是 "RULE"，而那时根本没有 UI 能改它 ——
+        // 所以存量值 "RULE" 一定是旧默认，不是用户选择。改回 AUTO，
+        // 否则升级上来的用户会被强制锁死在基础模式。
+        .let { if (it.engineTier == "RULE") it.copy(engineTier = "AUTO") else it }
     }
 }

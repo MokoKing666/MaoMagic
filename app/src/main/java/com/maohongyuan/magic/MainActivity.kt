@@ -19,6 +19,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import com.maohongyuan.magic.board.BoardScreen
+import com.maohongyuan.magic.core.interpret.InferencePrefs
 import com.maohongyuan.magic.core.data.DivinationRecordStore
 import com.maohongyuan.magic.core.data.GlassQuality
 import com.maohongyuan.magic.core.data.MagicSettings
@@ -113,7 +114,12 @@ private fun MagicApp() {
 
     var settings by remember { mutableStateOf(MagicSettings.DEFAULT) }
     LaunchedEffect(Unit) {
-        settingsStore.settings.collect { settings = it }
+        settingsStore.settings.collect { s ->
+            settings = s
+            // 把偏好同步到全局缓存 —— 降级链与端上后端都从那里读。
+            // 放这里而不是设置页里，是为了冷启动时就生效。
+            InferencePrefs.update(s.engineTier, s.inferenceBackend)
+        }
     }
 
     // API Key 单独管理：它不走 MagicSettings（那个会明文序列化落盘），

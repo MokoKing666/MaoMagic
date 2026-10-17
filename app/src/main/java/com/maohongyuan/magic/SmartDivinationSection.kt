@@ -66,6 +66,14 @@ internal fun SmartDivinationSection() {
         "用端上模型把算法算好的结论写成通顺的话。" +
             "卦理仍由本地规则引擎计算，模型只负责表达 —— 它不会改动用神与旺衰。"
     )
+    Spacer(Modifier.height(MagicSpacing.xs))
+    // 说明为什么推荐这一档 —— 否则「我是天玑旗舰，为什么推荐 GPU」会很困惑
+    Text(
+        text = "说明：NPU 需要芯片厂商的专有运行时（联发科/高通各自一套），" +
+            "litertlm-android 只带了 JNI 库、没带这些运行时，所以目前只能用 GPU。",
+        fontSize = MagicType.footnote.sp,
+        color = colors.tertiaryText,
+    )
     Spacer(Modifier.height(MagicSpacing.row))
 
     // 设备与推荐 —— 排查问题时让用户截图这两行就够

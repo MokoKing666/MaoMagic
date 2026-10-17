@@ -67,7 +67,15 @@ data class MagicSettings(
      *
      * 存字符串而非枚举，避免将来枚举改名导致旧数据反序列化失败。
      */
-    val engineTier: String = "RULE",
+    val engineTier: String = "AUTO",
+
+    /**
+     * 端上模型的后端偏好：AUTO / NPU / GPU / CPU。
+     *
+     * 与 [engineTier] 正交 —— 前者决定「用哪一档引擎」，
+     * 后者决定「端上模型用哪个加速器」。同样存字符串，避免枚举改名炸旧数据。
+     */
+    val inferenceBackend: String = "AUTO",
 
     /** 起卦后自动保存到历史 */
     val autoSaveHistory: Boolean = true,

@@ -29,6 +29,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maohongyuan.magic.core.interpret.InferencePrefs
 import com.maohongyuan.magic.core.data.ColorScheme
 import com.maohongyuan.magic.core.data.GlassQuality
 import com.maohongyuan.magic.core.data.MagicSettings
@@ -79,6 +80,137 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(MagicSpacing.section),
         ) {
         // ── 外观 ──
+        Section("解卦引擎") {
+            MagicLabel("用哪一档解卦")
+            Spacer(Modifier.height(MagicSpacing.row))
+            // 三档分开：本地模型与云端 AI 是两件事，混成「智能模式」用户分不清
+            // 数据去了哪里、要不要联网。
+            MagicSegmentedControl(
+                options = listOf("自动", "基础", "本地模型", "云端 AI"),
+                selectedIndex = when (settings.engineTier) {
+                    "RULE" -> 1
+                    "ON_DEVICE" -> 2
+                    "CLOUD_AI" -> 3
+                    else -> 0
+                },
+                onSelect = {
+                    val tier = when (it) {
+                        1 -> "RULE"
+                        2 -> "ON_DEVICE"
+                        3 -> "CLOUD_AI"
+                        else -> "AUTO"
+                    }
+                    onChange(settings.copy(engineTier = tier))
+                },
+            )
+            Spacer(Modifier.height(MagicSpacing.xs))
+            MagicCaption(
+                when (settings.engineTier) {
+                    "RULE" ->
+                        "基础：只用本地规则引擎。离线可用、结果可复现、不占存储。"
+                    "ON_DEVICE" ->
+                        "本地模型：手机自己算，完全不联网。需先在下面下载模型（约 1.9 GB）。"
+                    "CLOUD_AI" ->
+                        "云端 AI：把卦盘发给你填的 AI 服务，会联网，解读更细腻。"
+                    else ->
+                        "自动：优先本地模型，没下载就用云端（若已配），再不行退回基础。默认。"
+                }
+            )
+
+            if (settings.engineTier == "CLOUD_AI") {
+                Spacer(Modifier.height(MagicSpacing.cardPadding))
+                MagicLabel("服务地址")
+                Spacer(Modifier.height(MagicSpacing.sm))
+                MagicTextField(
+                    value = settings.cloudAiBaseUrl,
+                    onValueChange = { onChange(settings.copy(cloudAiBaseUrl = it)) },
+                    placeholder = "https://api.example.com/v1",
+                    keyboardType = KeyboardType.Uri,
+                )
+                Spacer(Modifier.height(MagicSpacing.xs))
+                MagicCaption("OpenAI 兼容接口的根地址，不要带 /chat/completions。")
+
+                Spacer(Modifier.height(MagicSpacing.cardPadding))
+                MagicLabel("API Key")
+                Spacer(Modifier.height(MagicSpacing.sm))
+                MagicTextField(
+                    value = cloudApiKey,
+                    onValueChange = onCloudApiKeyChange,
+                    placeholder = "sk-...",
+                    isPassword = true,
+                )
+                Spacer(Modifier.height(MagicSpacing.xs))
+                MagicCaption("只存在本机，用 Android Keystore 加密，不会上传到任何地方。")
+
+                Spacer(Modifier.height(MagicSpacing.cardPadding))
+                MagicLabel("模型名")
+                Spacer(Modifier.height(MagicSpacing.sm))
+                MagicTextField(
+                    value = settings.cloudAiModel,
+                    onValueChange = { onChange(settings.copy(cloudAiModel = it)) },
+                    placeholder = "gpt-4o-mini",
+                )
+
+                Spacer(Modifier.height(MagicSpacing.cardPadding))
+                MagicGlassSliderRow(
+                    label = "温度",
+                    valueText = "%.2f".format(settings.cloudAiTemperature),
+                    value = settings.cloudAiTemperature,
+                    onValueChange = { onChange(settings.copy(cloudAiTemperature = it)) },
+                    valueRange = 0f..1f,
+                    caption = "越低越稳定。解卦建议 0.2-0.4：同一卦象两次问不应得到完全不同的结论。",
+                )
+
+                Spacer(Modifier.height(MagicSpacing.cardPadding))
+                val ready = settings.cloudAiBaseUrl.isNotBlank() &&
+                    settings.cloudAiModel.isNotBlank() &&
+                    cloudApiKey.isNotBlank()
+                Text(
+                    text = if (ready) {
+                        MagicSemanticMark.AUSPICIOUS.glyph +
+                            " 配置完整，起卦时将优先使用云端 AI"
+                    } else {
+                        MagicSemanticMark.WARNING.glyph +
+                            " 配置不完整，仍会使用基础模式"
+                    },
+                    fontSize = MagicType.caption.sp,
+                    color = if (ready) colors.auspicious else colors.warning,
+                )
+                Spacer(Modifier.height(MagicSpacing.sm))
+                MagicCaption(
+                    "开启后应用会联网：请求发往上面填的地址，内容为卦盘与你所问的问题。" +
+                        "关闭此项即恢复完全离线。"
+                )
+            }
+        }
+
+        // ── 数据 ──
+        Section("智能解卦") {
+            MagicLabel("推理后端")
+            Spacer(Modifier.height(MagicSpacing.row))
+            // 机型检测只用来「推荐」，最终由用户决定 ——
+            // 有些 ROM 会改写 SoC 字段，自动判断不一定准。
+            MagicSegmentedControl(
+                options = InferencePrefs.BackendPref.entries.map { it.label },
+                selectedIndex = InferencePrefs.BackendPref.entries
+                    .indexOf(InferencePrefs.BackendPref.of(settings.inferenceBackend)),
+                onSelect = {
+                    onChange(
+                        settings.copy(
+                            inferenceBackend = InferencePrefs.BackendPref.entries[it].name
+                        )
+                    )
+                },
+            )
+            Spacer(Modifier.height(MagicSpacing.xs))
+            MagicCaption(
+                InferencePrefs.BackendPref.of(settings.inferenceBackend).description
+            )
+            Spacer(Modifier.height(MagicSpacing.cardPadding))
+
+            SmartDivinationSection()
+        }
+
         Section("外观") {
             MagicLabel("模式")
             Spacer(Modifier.height(MagicSpacing.row))
@@ -154,95 +286,6 @@ fun SettingsScreen(
         }
 
         // ── 解卦引擎 ──
-        Section("解卦引擎") {
-            MagicLabel("模式")
-            Spacer(Modifier.height(MagicSpacing.row))
-            MagicSegmentedControl(
-                options = listOf("基础模式", "智能模式"),
-                selectedIndex = if (settings.cloudAiEnabled) 1 else 0,
-                onSelect = { onChange(settings.copy(cloudAiEnabled = it == 1)) },
-            )
-            Spacer(Modifier.height(MagicSpacing.xs))
-            MagicCaption(
-                if (settings.cloudAiEnabled) {
-                    "智能模式：把排好的卦盘发给你指定的 AI 服务，由它做论述。"
-                } else {
-                    "基础模式：本地规则引擎，离线可用、结果可复现。默认且推荐。"
-                }
-            )
-
-            if (settings.cloudAiEnabled) {
-                Spacer(Modifier.height(MagicSpacing.cardPadding))
-                MagicLabel("服务地址")
-                Spacer(Modifier.height(MagicSpacing.sm))
-                MagicTextField(
-                    value = settings.cloudAiBaseUrl,
-                    onValueChange = { onChange(settings.copy(cloudAiBaseUrl = it)) },
-                    placeholder = "https://api.example.com/v1",
-                    keyboardType = KeyboardType.Uri,
-                )
-                Spacer(Modifier.height(MagicSpacing.xs))
-                MagicCaption("OpenAI 兼容接口的根地址，不要带 /chat/completions。")
-
-                Spacer(Modifier.height(MagicSpacing.cardPadding))
-                MagicLabel("API Key")
-                Spacer(Modifier.height(MagicSpacing.sm))
-                MagicTextField(
-                    value = cloudApiKey,
-                    onValueChange = onCloudApiKeyChange,
-                    placeholder = "sk-...",
-                    isPassword = true,
-                )
-                Spacer(Modifier.height(MagicSpacing.xs))
-                MagicCaption("只存在本机，用 Android Keystore 加密，不会上传到任何地方。")
-
-                Spacer(Modifier.height(MagicSpacing.cardPadding))
-                MagicLabel("模型名")
-                Spacer(Modifier.height(MagicSpacing.sm))
-                MagicTextField(
-                    value = settings.cloudAiModel,
-                    onValueChange = { onChange(settings.copy(cloudAiModel = it)) },
-                    placeholder = "gpt-4o-mini",
-                )
-
-                Spacer(Modifier.height(MagicSpacing.cardPadding))
-                MagicGlassSliderRow(
-                    label = "温度",
-                    valueText = "%.2f".format(settings.cloudAiTemperature),
-                    value = settings.cloudAiTemperature,
-                    onValueChange = { onChange(settings.copy(cloudAiTemperature = it)) },
-                    valueRange = 0f..1f,
-                    caption = "越低越稳定。解卦建议 0.2-0.4：同一卦象两次问不应得到完全不同的结论。",
-                )
-
-                Spacer(Modifier.height(MagicSpacing.cardPadding))
-                val ready = settings.cloudAiBaseUrl.isNotBlank() &&
-                    settings.cloudAiModel.isNotBlank() &&
-                    cloudApiKey.isNotBlank()
-                Text(
-                    text = if (ready) {
-                        MagicSemanticMark.AUSPICIOUS.glyph +
-                            " 配置完整，起卦时将优先使用云端 AI"
-                    } else {
-                        MagicSemanticMark.WARNING.glyph +
-                            " 配置不完整，仍会使用基础模式"
-                    },
-                    fontSize = MagicType.caption.sp,
-                    color = if (ready) colors.auspicious else colors.warning,
-                )
-                Spacer(Modifier.height(MagicSpacing.sm))
-                MagicCaption(
-                    "开启后应用会联网：请求发往上面填的地址，内容为卦盘与你所问的问题。" +
-                        "关闭此项即恢复完全离线。"
-                )
-            }
-        }
-
-        // ── 数据 ──
-        Section("智能解卦") {
-            SmartDivinationSection()
-        }
-
         Section("数据") {
             MagicLabel("自动保存卦例")
             Spacer(Modifier.height(MagicSpacing.row))

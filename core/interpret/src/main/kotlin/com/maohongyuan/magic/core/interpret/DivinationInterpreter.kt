@@ -68,8 +68,19 @@ class InterpreterChain(
      * 若某引擎声明可用但在执行时失败（如网络中断），会继续降级到下一个 ——
      * 「可用」只是入场券，执行仍可能失败。
      */
-    suspend fun interpret(request: InterpretationRequest): Interpretation {
-        val ordered = interpreters.sortedBy { EngineTier.chain.indexOf(it.tier) }
+    suspend fun interpret(
+        request: InterpretationRequest,
+        /** 用户指定的档位。默认取全局偏好，null 则自动降级 */
+        preferred: EngineTier? = InferencePrefs.preferredTier,
+    ): Interpretation {
+        val byPriority = interpreters.sortedBy { EngineTier.chain.indexOf(it.tier) }
+        // 用户选的那一档排到最前；它不可用时仍按原顺序降级 ——
+        // 宁可给一个「不是你选的」结果，也不要什么都不给。
+        val ordered = if (preferred == null) {
+            byPriority
+        } else {
+            byPriority.filter { it.tier == preferred } + byPriority.filter { it.tier != preferred }
+        }
 
         // 规则引擎**总是先算一遍**。
         //
