@@ -148,6 +148,19 @@ data class LiuYaoChart(
      */
     val jieQi: String? = null,
 ) : DivinationChart {
+
+    /**
+     * 当日神煞。
+     *
+     * **只做展示，不进断卦推理链。**
+     * 神煞加进规则引擎会让结论变得不可解释 —— 用户看到「因为带桃花所以不吉」
+     * 这种推断，既无法验证也无法反驳。神煞是辅助观察，不是判据。
+     *
+     * 用计算属性而不是构造参数：由日干支唯一决定，不需要单独存，
+     * 也就不用改 `chart()` 的所有调用点。
+     */
+    val shenSha: List<ShenShaHit>
+        get() = ShenSha.of(dayGanZhi.stem, dayGanZhi.branch)
     override val system: DivinationSystem = DivinationSystem.LIU_YAO
 
     val movingIndexes: List<Int> get() = lines.filter { it.moving }.map { it.index }

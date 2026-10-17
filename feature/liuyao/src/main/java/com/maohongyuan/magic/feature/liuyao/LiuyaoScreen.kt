@@ -188,6 +188,7 @@ fun LiuyaoScreen(scrollState: ScrollState) {
             }
 
             HexagramCard(chart)
+            ShenShaCard(chart)
             CourseCard(chart)
         }
 
@@ -631,6 +632,54 @@ private fun ManualPanel(
 // ─────────────────────────────────────────────────────────────
 // 卦盘
 // ─────────────────────────────────────────────────────────────
+
+/**
+ * 神煞卡。
+ *
+ * 每个神煞落在某一地支；卦中有该地支就标出是第几爻，没有就标「卦中无」。
+ *
+ * 为什么「卦中无」也显示：知道「驿马在寅但卦里没寅」是有信息的 ——
+ * 说明这一卦借不上驿马。藏起来反而像没算。
+ */
+@Composable
+private fun ShenShaCard(chart: LiuYaoChart) {
+    val colors = LocalMagicColors.current
+    // 地支 → 爻位（自初爻起）
+    val byBranch = chart.lines.associate { it.naJia.branch to it.index }
+
+    GlassCard(level = GlassLevel.Regular) {
+        MagicSectionTitle("神煞")
+        Spacer(Modifier.height(MagicSpacing.sm))
+        chart.shenSha.forEach { hit ->
+            val lineIndex = byBranch[hit.branch]
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = hit.shenSha.label,
+                    fontSize = MagicType.footnote.sp,
+                    color = colors.secondaryText,
+                    modifier = Modifier.width(56.dp),
+                )
+                Text(
+                    text = hit.branch.label,
+                    fontSize = MagicType.footnote.sp,
+                    color = colors.tertiaryText,
+                    modifier = Modifier.width(28.dp),
+                )
+                Text(
+                    text = if (lineIndex != null) YaoPosition.of(lineIndex).ordinalLabel + "爻" else "卦中无",
+                    fontSize = MagicType.footnote.sp,
+                    fontWeight = if (lineIndex != null) FontWeight.Medium else FontWeight.Normal,
+                    color = if (lineIndex != null) colors.accent else colors.tertiaryText,
+                )
+            }
+        }
+        Spacer(Modifier.height(MagicSpacing.xs))
+        MagicCaption("神煞只作参考，不参与断卦推理。取法见 docs/神煞取法.md。")
+    }
+}
 
 @Composable
 private fun HexagramCard(chart: LiuYaoChart) {
