@@ -71,4 +71,36 @@ class TymeParityTest {
         assertEquals("lunar 在非节气日应为空", null, lunarJq?.ifBlank { null })
         assertEquals("寒露", tymeJq)
     }
+
+    @Test
+    fun `黄历字段两年逐日一致`() {
+        var n = 0
+        val diffs = LinkedHashMap<String, String>()
+
+        // lunar 在宜忌/吉神为空时返回占位符「无」，tyme 返回空列表 ——
+        // 语义一致，比对前把占位符去掉
+        fun norm(list: List<String>) = list.filter { it.isNotBlank() && it != "无" }.joinToString(" ")
+
+        fun check(field: String, d: LocalDate, expected: String, actual: String) {
+            if (expected != actual && field !in diffs) diffs[field] = "$d  lunar=$expected  tyme=$actual"
+        }
+
+        days().forEach { d ->
+            val l = Solar.fromYmdHms(d.year, d.monthValue, d.dayOfMonth, 12, 0, 0).lunar
+            val t = SolarDay.fromYmd(d.year, d.monthValue, d.dayOfMonth).getLunarDay()
+
+            check("宜", d, norm(l.dayYi), t.getRecommends().joinToString(" ") { it.getName() })
+            check("忌", d, norm(l.dayJi), t.getAvoids().joinToString(" ") { it.getName() })
+            check("值星", d, l.zhiXing, t.getDuty().toString())
+            check("宿", d, l.xiu, t.getTwentyEightStar().toString())
+            check("黄黑道", d, l.dayTianShen, t.getTwelveStar().toString())
+            // 吉神 + 凶煞 = tyme 的 Gods（探针已确认顺序：吉神在前、凶煞在后）
+            check("吉凶神", d,
+                norm(l.dayJiShen + l.dayXiongSha),
+                t.getGods().joinToString(" ") { it.getName() })
+            n++
+        }
+        assertTrue("只比了 $n 天", n >= 700)
+        assertTrue("有字段不一致：$diffs", diffs.isEmpty())
+    }
 }
