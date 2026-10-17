@@ -239,6 +239,10 @@ fun SettingsScreen(
         }
 
         // ── 数据 ──
+        Section("智能解卦") {
+            SmartDivinationSection()
+        }
+
         Section("数据") {
             MagicLabel("自动保存卦例")
             Spacer(Modifier.height(MagicSpacing.row))
