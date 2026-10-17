@@ -2,12 +2,15 @@ package com.maohongyuan.magic.feature.personality
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -59,6 +62,7 @@ private const val PAGE_SIZE = 6
 @Composable
 fun PersonalityScreen(scrollState: ScrollState) {
     val colors = LocalMagicColors.current
+    val shapes = LocalMagicShapes.current
 
     val answers = remember { mutableStateMapOf<Int, Int>() }
     var page by remember { mutableIntStateOf(0) }
@@ -100,11 +104,24 @@ fun PersonalityScreen(scrollState: ScrollState) {
                 )
             }
             Spacer(Modifier.height(MagicSpacing.sm))
-            MagicMetricBar(
-                label = "",
-                ratio = answers.size.toFloat() / questions.size,
-                color = colors.accent,
-            )
+            // 进度条自己画，不用 MagicMetricBar ——
+            // 它自带百分比读数，会和上面的「已答 n/60」重复；
+            // 而把计数塞进它的 label 又会被挤成一字一行（label 栏宽度不够）。
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(6.dp)
+                    .clip(shapes.pill)
+                    .background(colors.divider),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(answers.size.toFloat() / questions.size)
+                        .fillMaxHeight()
+                        .clip(shapes.pill)
+                        .background(colors.accent),
+                )
+            }
         }
 
         // ── 本页题目 ──
@@ -203,23 +220,28 @@ private fun QuestionRow(
             repeat(5) { i ->
                 val choice = i + 1
                 val on = selected == choice
+                // 统一尺寸 + 描边：原实现把中间那个做小 4dp，排出来参差不齐；
+                // 且全实心灰没有任何可点暗示，用户不知道能点。
                 Box(
                     modifier = Modifier
-                        .padding(horizontal = 6.dp)
-                        .size(if (choice == 3) 30.dp else 34.dp)
+                        .padding(horizontal = 5.dp)
+                        .size(38.dp)
                         .clip(shapes.pill)
-                        .background(if (on) colors.accent else colors.divider)
+                        .background(if (on) colors.accent else Color.Transparent)
+                        .border(
+                            width = if (on) 0.dp else 1.dp,
+                            color = if (on) Color.Transparent else colors.divider,
+                            shape = shapes.pill,
+                        )
                         .clickable { onSelect(choice) },
                     contentAlignment = Alignment.Center,
                 ) {
-                    if (on) {
-                        Text(
-                            text = "$choice",
-                            fontSize = MagicType.caption.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = colors.backdropBase,
-                        )
-                    }
+                    Text(
+                        text = "$choice",
+                        fontSize = MagicType.caption.sp,
+                        fontWeight = if (on) FontWeight.Bold else FontWeight.Normal,
+                        color = if (on) colors.backdropBase else colors.tertiaryText,
+                    )
                 }
             }
         }
