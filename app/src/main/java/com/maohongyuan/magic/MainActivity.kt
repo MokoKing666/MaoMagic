@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.maohongyuan.magic.core.data.DivinationRecordStore
 import com.maohongyuan.magic.core.data.GlassQuality
 import com.maohongyuan.magic.core.data.MagicSettings
+import com.maohongyuan.magic.core.data.SecretStore
 import com.maohongyuan.magic.core.data.SettingsStore
 import com.maohongyuan.magic.designsystem.glass.GlassTuning
 import com.maohongyuan.magic.designsystem.glass.LocalGlassTuning
@@ -54,6 +55,14 @@ private fun MagicApp() {
     val context = LocalContext.current
     val settingsStore = remember { SettingsStore(context) }
     val recordStore = remember { DivinationRecordStore(context) }
+    val secretStore = remember { SecretStore(context) }
+
+    // API Key 单独管理：它不走 MagicSettings（那个会明文序列化落盘），
+    // 而是存在 Android Keystore 加密的 SecretStore 里。
+    var cloudApiKey by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        cloudApiKey = secretStore.get(SecretStore.KEY_CLOUD_API_KEY)
+    }
 
     // 设置：先给默认值，读到持久化值后自动替换 —— 避免启动时白屏或闪烁
     var settings by remember { mutableStateOf(MagicSettings.DEFAULT) }
@@ -99,6 +108,11 @@ private fun MagicApp() {
                         onChange = { next ->
                             settings = next
                             scope.launch { settingsStore.update { next } }
+                        },
+                        cloudApiKey = cloudApiKey,
+                        onCloudApiKeyChange = { key ->
+                            cloudApiKey = key
+                            secretStore.put(SecretStore.KEY_CLOUD_API_KEY, key)
                         },
                         historyCount = historyCount,
                         onClearHistory = { scope.launch { recordStore.clear() } },

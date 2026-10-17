@@ -59,6 +59,19 @@ data class MagicSettings(
 
     /** 起卦后自动保存到历史 */
     val autoSaveHistory: Boolean = true,
+
+    // ── 智能模式（云端 AI，**可选且默认关闭**）──────────────
+    //
+    // ⚠️ 这是本应用唯一会联网的功能。以下四项全部为空/关闭时，
+    //    CloudAiInterpreter.isAvailable() 恒为 false，降级链直接落到 Tier1，
+    //    **不会产生任何网络流量**。
+    //
+    // API Key **不在这里** —— 它存在 SecretStore（Android Keystore 加密），
+    // 因为这个 data class 会被序列化成明文 JSON 落盘。
+    val cloudAiEnabled: Boolean = false,
+    val cloudAiBaseUrl: String = "",
+    val cloudAiModel: String = "",
+    val cloudAiTemperature: Float = 0.3f,
 ) {
     companion object {
         val DEFAULT = MagicSettings()

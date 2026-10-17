@@ -37,6 +37,14 @@ import com.maohongyuan.magic.core.hexagram.MeihuaChart
 import com.maohongyuan.magic.core.hexagram.MeihuaDivination
 import com.maohongyuan.magic.core.interpret.Interpretation
 import com.maohongyuan.magic.core.interpret.InterpretationRequest
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.platform.LocalContext
+import com.maohongyuan.magic.core.ai.CloudAiConfig
+import com.maohongyuan.magic.core.ai.CloudAiInterpreter
+import com.maohongyuan.magic.core.data.SecretStore
+import com.maohongyuan.magic.core.data.SettingsStore
+import com.maohongyuan.magic.core.interpret.InterpreterChain
 import com.maohongyuan.magic.core.interpret.MeihuaRuleEngine
 import com.maohongyuan.magic.core.interpret.Tone
 import com.maohongyuan.magic.core.interpret.Verdict
@@ -86,18 +94,50 @@ fun MeihuaScreen(scrollState: ScrollState) {
 
     val scope = rememberCoroutineScope()
 
+    // ── 解卦降级链：智能模式 → 基础模式 ──
+    //
+    // 云端配置默认关闭，所以默认状态下 CloudAiInterpreter.isAvailable 恒为 false，
+    // 链直接落到 Tier1 —— 默认零网络。用户填好 Key 后无需重启即生效。
+    val context = LocalContext.current
+    var cloudConfig by remember { mutableStateOf(CloudAiConfig.DEFAULT) }
+    LaunchedEffect(Unit) {
+        val settingsStore = SettingsStore(context)
+        val secretStore = SecretStore(context)
+        settingsStore.settings.collect { st ->
+            cloudConfig = CloudAiConfig(
+                enabled = st.cloudAiEnabled,
+                baseUrl = st.cloudAiBaseUrl,
+                apiKey = secretStore.get(SecretStore.KEY_CLOUD_API_KEY),
+                model = st.cloudAiModel,
+                temperature = st.cloudAiTemperature,
+            )
+        }
+    }
+    // rememberUpdatedState 让 lambda 拿到**最新**配置，同时保持实例稳定
+    val configRef = rememberUpdatedState(cloudConfig)
+    val chain = remember {
+        InterpreterChain(
+            listOf(
+                CloudAiInterpreter { configRef.value },
+                MeihuaRuleEngine(),
+            )
+        )
+    }
+
     fun interpret(chartValue: MeihuaChart) {
         val day = CalendarService.today()
         monthBranch = day.monthBranch
         interpretation = null
         scope.launch {
-            interpretation = MeihuaRuleEngine().interpret(
+            // InterpreterChain.interpret 直接返回结果（内部已做降级与 firstOrNull），
+            // 不再是 Flow —— 这里不能再接 .firstOrNull()
+            interpretation = chain.interpret(
                 InterpretationRequest(
                     question = question.ifBlank { "综合" },
                     meihua = chartValue,
                     monthBranch = day.monthBranch,
                 )
-            ).firstOrNull()
+            )
         }
     }
 

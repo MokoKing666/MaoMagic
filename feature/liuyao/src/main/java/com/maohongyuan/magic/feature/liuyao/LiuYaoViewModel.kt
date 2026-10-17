@@ -6,6 +6,10 @@ import androidx.compose.runtime.setValue
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import com.maohongyuan.magic.core.calendar.CalendarService
+import com.maohongyuan.magic.core.ai.CloudAiConfig
+import com.maohongyuan.magic.core.ai.CloudAiInterpreter
+import com.maohongyuan.magic.core.data.SecretStore
+import com.maohongyuan.magic.core.data.SettingsStore
 import com.maohongyuan.magic.core.data.DivinationRecord
 import com.maohongyuan.magic.core.data.DivinationRecordStore
 import com.maohongyuan.magic.core.calendar.DayInfo
@@ -75,15 +79,46 @@ data class LiuYaoUiState(
 class LiuYaoViewModel(application: Application) : AndroidViewModel(application) {
 
     private val recordStore = DivinationRecordStore(application)
+    private val settingsStore = SettingsStore(application)
+    private val secretStore = SecretStore(application)
 
     var state by mutableStateOf(LiuYaoUiState())
         private set
 
-    /** 解卦引擎降级链。Tier2/3 尚未接入，但链接口已就位。 */
-    private val chain = InterpreterChain(listOf(LiuYaoRuleEngine()))
+    /**
+     * 云端配置的**实时快照**。
+     *
+     * 用可变字段 + lambda 提供给链，而不是构造时读一次 ——
+     * 用户在设置里填完 Key 应当**立刻生效**，不必重启应用。
+     */
+    private var cloudConfig = CloudAiConfig.DEFAULT
+
+    /**
+     * 解卦引擎降级链：智能模式 → 基础模式。
+     *
+     * [CloudAiConfig] 默认关闭，所以默认状态下 [CloudAiInterpreter.isAvailable]
+     * 恒为 false，链直接落到 Tier1 —— **默认零网络**。
+     */
+    private val chain = InterpreterChain(
+        listOf(
+            CloudAiInterpreter { cloudConfig },
+            LiuYaoRuleEngine(),
+        )
+    )
 
     init {
         refreshDay()
+        viewModelScope.launch {
+            settingsStore.settings.collect { s ->
+                cloudConfig = CloudAiConfig(
+                    enabled = s.cloudAiEnabled,
+                    baseUrl = s.cloudAiBaseUrl,
+                    apiKey = secretStore.get(SecretStore.KEY_CLOUD_API_KEY),
+                    model = s.cloudAiModel,
+                    temperature = s.cloudAiTemperature,
+                )
+            }
+        }
         viewModelScope.launch {
             recordStore.records.collect { list ->
                 state = state.copy(history = list)

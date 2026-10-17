@@ -35,6 +35,8 @@ import com.maohongyuan.magic.designsystem.glass.MagicDivider
 import com.maohongyuan.magic.designsystem.glass.MagicGlassSliderRow
 import com.maohongyuan.magic.designsystem.glass.MagicGlassSurface
 import com.maohongyuan.magic.designsystem.glass.MagicLabel
+import androidx.compose.ui.text.input.KeyboardType
+import com.maohongyuan.magic.designsystem.glass.MagicTextField
 import com.maohongyuan.magic.designsystem.glass.MagicListRow
 import com.maohongyuan.magic.designsystem.glass.MagicSegmentedControl
 import com.maohongyuan.magic.designsystem.glass.MagicSolidButton
@@ -55,6 +57,9 @@ import com.maohongyuan.magic.designsystem.theme.MagicType
 fun SettingsSheet(
     settings: MagicSettings,
     onChange: (MagicSettings) -> Unit,
+    /** API Key 单独走 Keystore，不进 MagicSettings（后者会明文落盘） */
+    cloudApiKey: String,
+    onCloudApiKeyChange: (String) -> Unit,
     historyCount: Int,
     onClearHistory: () -> Unit,
     onOpenLicenses: () -> Unit,
@@ -178,18 +183,89 @@ fun SettingsSheet(
                         MagicCaption("无论选哪种，吉凶都同时用颜色与字形（✓ / ✕）双通道表达，不单独依赖颜色。")
                     }
 
-                    // ── 解卦 ──
+                    // ── 解卦引擎 ──
                     Section("解卦引擎") {
+                        MagicLabel("模式")
+                        Spacer(Modifier.height(MagicSpacing.row))
                         MagicSegmentedControl(
-                            options = listOf("基础模式", "智能模式", "本地模型"),
-                            selectedIndex = 0,
-                            onSelect = { },
+                            options = listOf("基础模式", "智能模式"),
+                            selectedIndex = if (settings.cloudAiEnabled) 1 else 0,
+                            onSelect = { onChange(settings.copy(cloudAiEnabled = it == 1)) },
                         )
                         Spacer(Modifier.height(MagicSpacing.xs))
                         MagicCaption(
-                            "当前使用「基础模式」—— 本地规则引擎，离线可用、结果可复现。\n" +
-                                "智能模式（云端 AI）与本地模型尚未接入，降级链已就位。"
+                            if (settings.cloudAiEnabled) {
+                                "智能模式：把排好的卦盘发给你指定的 AI 服务，由它做论述。"
+                            } else {
+                                "基础模式：本地规则引擎，离线可用、结果可复现。默认且推荐。"
+                            }
                         )
+
+                        if (settings.cloudAiEnabled) {
+                            Spacer(Modifier.height(MagicSpacing.cardPadding))
+                            MagicLabel("服务地址")
+                            Spacer(Modifier.height(MagicSpacing.sm))
+                            MagicTextField(
+                                value = settings.cloudAiBaseUrl,
+                                onValueChange = { onChange(settings.copy(cloudAiBaseUrl = it)) },
+                                placeholder = "https://api.example.com/v1",
+                                keyboardType = KeyboardType.Uri,
+                            )
+                            Spacer(Modifier.height(MagicSpacing.xs))
+                            MagicCaption("OpenAI 兼容接口的根地址，不要带 /chat/completions。")
+
+                            Spacer(Modifier.height(MagicSpacing.cardPadding))
+                            MagicLabel("API Key")
+                            Spacer(Modifier.height(MagicSpacing.sm))
+                            MagicTextField(
+                                value = cloudApiKey,
+                                onValueChange = onCloudApiKeyChange,
+                                placeholder = "sk-...",
+                                isPassword = true,
+                            )
+                            Spacer(Modifier.height(MagicSpacing.xs))
+                            MagicCaption("只存在本机，用 Android Keystore 加密，不会上传到任何地方。")
+
+                            Spacer(Modifier.height(MagicSpacing.cardPadding))
+                            MagicLabel("模型名")
+                            Spacer(Modifier.height(MagicSpacing.sm))
+                            MagicTextField(
+                                value = settings.cloudAiModel,
+                                onValueChange = { onChange(settings.copy(cloudAiModel = it)) },
+                                placeholder = "gpt-4o-mini",
+                            )
+
+                            Spacer(Modifier.height(MagicSpacing.cardPadding))
+                            MagicGlassSliderRow(
+                                label = "温度",
+                                valueText = "%.2f".format(settings.cloudAiTemperature),
+                                value = settings.cloudAiTemperature,
+                                onValueChange = { onChange(settings.copy(cloudAiTemperature = it)) },
+                                valueRange = 0f..1f,
+                                caption = "越低越稳定。解卦建议 0.2-0.4：同一卦象两次问不应得到完全不同的结论。",
+                            )
+
+                            Spacer(Modifier.height(MagicSpacing.cardPadding))
+                            val ready = settings.cloudAiBaseUrl.isNotBlank() &&
+                                settings.cloudAiModel.isNotBlank() &&
+                                cloudApiKey.isNotBlank()
+                            Text(
+                                text = if (ready) {
+                                    MagicSemanticMark.AUSPICIOUS.glyph +
+                                        " 配置完整，起卦时将优先使用云端 AI"
+                                } else {
+                                    MagicSemanticMark.WARNING.glyph +
+                                        " 配置不完整，仍会使用基础模式"
+                                },
+                                fontSize = MagicType.caption.sp,
+                                color = if (ready) colors.auspicious else colors.warning,
+                            )
+                            Spacer(Modifier.height(MagicSpacing.sm))
+                            MagicCaption(
+                                "开启后应用会联网：请求发往上面填的地址，内容为卦盘与你所问的问题。" +
+                                    "关闭此项即恢复完全离线。"
+                            )
+                        }
                     }
 
                     // ── 数据 ──

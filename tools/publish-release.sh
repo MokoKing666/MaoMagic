@@ -14,7 +14,7 @@ set -euo pipefail
 
 REPO_NAME="${1:-maoxian-huanzhu}"
 OWNER="${GITHUB_OWNER:-MokoKing666}"
-TAG="v1.0.0"
+TAG="v1.1.0"
 APK="app/build/outputs/apk/release/app-release.apk"
 
 cd "$(dirname "$0")/.."

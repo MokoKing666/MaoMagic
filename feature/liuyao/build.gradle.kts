@@ -33,6 +33,7 @@ dependencies {
     implementation(project(":core:hexagram"))
     implementation(project(":core:interpret"))
     implementation(project(":core:data"))
+    implementation(project(":core:ai"))
 
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
