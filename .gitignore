@@ -37,3 +37,7 @@ signing.properties
 *.safetensors
 models/
 assets/models/
+
+# ── AI 助手的工作笔记（绝不入库）──────────────────────────
+# 这些是开发过程中的内部笔记，不属于交付物，也不该出现在公开仓库里。
+.workbuddy-ai/
