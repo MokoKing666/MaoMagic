@@ -1,6 +1,7 @@
 package com.maohongyuan.magic.core.ai
 
 import android.content.Context
+import android.util.Log
 import com.google.mediapipe.tasks.genai.llminference.LlmInference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -53,21 +54,31 @@ class LiteRtLmBackend(
         if (inference != null) return@withContext true
         if (!modelFile.exists()) {
             lastError = "模型文件不存在：${modelFile.absolutePath}"
+            Log.e(TAG, lastError!!)
             return@withContext false
         }
+        Log.i(TAG, "开始加载：${modelFile.absolutePath} (${modelFile.length() / 1048576} MB), preferGpu=$preferGpu")
 
         if (preferGpu) {
             runCatching { create(LlmInference.Backend.GPU) }
-                .onSuccess { inference = it; usingGpu = true; lastError = null; return@withContext true }
+                .onSuccess {
+                    inference = it; usingGpu = true; lastError = null
+                    Log.i(TAG, "GPU 后端加载成功")
+                    return@withContext true
+                }
                 .onFailure { gpuError ->
                     // GPU 起不来是常态（机型差异大），不是异常情况，不往上抛
                     lastError = "GPU 初始化失败，改用 CPU：${gpuError.message}"
+                    Log.w(TAG, "GPU 失败，转 CPU", gpuError)
                 }
         }
 
         runCatching { create(LlmInference.Backend.CPU) }
-            .onSuccess { inference = it; usingGpu = false }
-            .onFailure { lastError = "模型加载失败：${it.message}" }
+            .onSuccess { inference = it; usingGpu = false; Log.i(TAG, "CPU 后端加载成功") }
+            .onFailure {
+                lastError = "模型加载失败：${it.message}"
+                Log.e(TAG, "CPU 也失败了", it)
+            }
         inference != null
     }
 
@@ -95,8 +106,14 @@ class LiteRtLmBackend(
             if (inference == null && !load()) return@withContext null
             val llm = inference ?: return@withContext null
             val prompt = buildPrompt(systemPrompt, userMessage)
+            Log.i(TAG, "开始推理，prompt ${prompt.length} 字符")
+            val t0 = System.currentTimeMillis()
             runCatching { llm.generateResponse(prompt) }
-                .onFailure { lastError = "推理失败：${it.message}" }
+                .onSuccess { Log.i(TAG, "推理完成，${it.length} 字符，耗时 ${System.currentTimeMillis() - t0} ms") }
+                .onFailure {
+                    lastError = "推理失败：${it.message}"
+                    Log.e(TAG, "推理失败", it)
+                }
                 .getOrNull()
                 ?.takeIf { it.isNotBlank() }
         }
@@ -107,6 +124,10 @@ class LiteRtLmBackend(
         append("\n\n")
         append(userMessage)
         append("<end_of_turn>\n<start_of_turn>model\n")
+    }
+
+    private companion object {
+        const val TAG = "MaoMagicLLM"
     }
 
     /** 释放。2 GB 模型常驻会拖垮系统，切走就要放 */
