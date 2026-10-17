@@ -285,7 +285,14 @@ private fun CoinFace(angle: Float, isZi: Boolean, thrown: Boolean, tint: Color, 
     // 真实铜钱的区别方式就是「字面有纹、背面光素」，这里照这个来：
     // 字面在方孔四周画四道短纹（四字位），背面留白。
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        val coinColor = if (thrown) tint else colors.tertiaryText
+        // 铜钱用**暗金**，不用强调色 —— 强调色是蓝的，画出来不像铜钱。
+        // 亮色主题下用偏褐的暗金（#8A6A32），深色主题下提亮到 #C9A961，
+        // 否则深底上的暗金几乎看不见。
+        val coinColor = when {
+            !thrown -> colors.tertiaryText
+            colors.isLight -> Color(0xFF8A6A32)
+            else -> Color(0xFFC9A961)
+        }
         Canvas(
             modifier = Modifier
                 .size(40.dp)
@@ -293,7 +300,7 @@ private fun CoinFace(angle: Float, isZi: Boolean, thrown: Boolean, tint: Color, 
         ) {
             val r = size.minDimension / 2f
             val c = Offset(size.width / 2f, size.height / 2f)
-            val ring = r * 0.16f
+            val ring = r * 0.19f
 
             // 外圆：淡金填充 + 金色描边
             drawCircle(color = coinColor.copy(alpha = 0.16f), radius = r - ring / 2f, center = c)
@@ -339,7 +346,7 @@ private fun CoinFace(angle: Float, isZi: Boolean, thrown: Boolean, tint: Color, 
             },
             fontSize = MagicType.caption.sp,
             fontWeight = FontWeight.Medium,
-            color = if (thrown && showingZi) tint else colors.tertiaryText,
+            color = if (thrown && showingZi) coinColor else colors.tertiaryText,
         )
     }
 }
