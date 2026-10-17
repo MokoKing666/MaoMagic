@@ -93,7 +93,10 @@ private fun SystemGrid(
                     Box(modifier = Modifier.weight(1f)) {
                         MagicSystemCard(
                             title = sys.title,
-                            subtitle = sys.subtitle,
+                            // 未实现的系统仍显示卡片（让用户看到全貌），
+                            // 但必须在副标题上标明「开发中」—— 否则点下去没反应，
+                            // 用户会以为应用坏了。
+                            subtitle = if (sys.available) sys.subtitle else "开发中",
                             icon = sys.icon,
                             onClick = {
                                 if (sys.available) onOpen(sys) else onUnavailable(sys)
