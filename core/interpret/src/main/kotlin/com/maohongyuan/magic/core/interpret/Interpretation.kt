@@ -94,6 +94,19 @@ data class InterpretationRequest(
     val gender: com.maohongyuan.magic.core.calendar.Gender =
         com.maohongyuan.magic.core.calendar.Gender.MALE,
     /**
+     * **算法已算定的事实**（规则引擎的输出）。
+     *
+     * AI 引擎拿到它之后，**只负责把这些事实说成人话，不得重新推算卦理**。
+     *
+     * 为什么必须这么做：用神取谁、旺衰如何、是否旬空、哪爻动 ——
+     * 这些是确定性计算，规则引擎不会错。让 AI 从原始盘面自己推，它会给
+     * 「用神旺相」这种听起来对、实际是「囚」的结论，而且编得很有说服力。
+     *
+     * 为 null 表示调用方没提供（例如直接调 AI 引擎做测试），
+     * 此时 AI 只能看到盘面 —— 输出质量会下降，但不该崩。
+     */
+    val facts: Interpretation? = null,
+    /**
      * 月建地支。
      *
      * 六爻盘内已含月建，无需传；**梅花必须传**，否则无法判断体卦旺衰，
