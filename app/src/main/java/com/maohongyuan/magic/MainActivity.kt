@@ -64,7 +64,24 @@ class MainActivity : ComponentActivity() {
 
         enableEdgeToEdge()
         setContent {
-            MagicTheme {
+            // 主题必须在 MagicTheme 之外读取 —— 它决定 MagicTheme 的入参。
+            // SettingsStore 内部用 preferencesDataStore 委托，同进程重复创建
+            // 会共享同一个 DataStore 实例，所以这里再 new 一次是安全的。
+            val ctx = androidx.compose.ui.platform.LocalContext.current
+            val themeStore = androidx.compose.runtime.remember { SettingsStore(ctx) }
+            var themeMode by androidx.compose.runtime.remember {
+                androidx.compose.runtime.mutableStateOf(com.maohongyuan.magic.core.data.ThemeMode.SYSTEM)
+            }
+            androidx.compose.runtime.LaunchedEffect(Unit) {
+                themeStore.settings.collect { themeMode = it.themeMode }
+            }
+            val dark = when (themeMode) {
+                com.maohongyuan.magic.core.data.ThemeMode.SYSTEM ->
+                    androidx.compose.foundation.isSystemInDarkTheme()
+                com.maohongyuan.magic.core.data.ThemeMode.LIGHT -> false
+                com.maohongyuan.magic.core.data.ThemeMode.DARK -> true
+            }
+            MagicTheme(darkTheme = dark) {
                 MagicApp()
             }
         }

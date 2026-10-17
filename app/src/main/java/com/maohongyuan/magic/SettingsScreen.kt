@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import com.maohongyuan.magic.core.data.ColorScheme
 import com.maohongyuan.magic.core.data.GlassQuality
 import com.maohongyuan.magic.core.data.MagicSettings
+import com.maohongyuan.magic.core.data.ThemeMode
 import com.maohongyuan.magic.designsystem.glass.GlassLevel
 import com.maohongyuan.magic.designsystem.glass.MagicBadge
 import com.maohongyuan.magic.designsystem.glass.MagicCaption
@@ -79,6 +80,17 @@ fun SettingsScreen(
         ) {
         // ── 外观 ──
         Section("外观") {
+            MagicLabel("模式")
+            Spacer(Modifier.height(MagicSpacing.row))
+            MagicSegmentedControl(
+                options = ThemeMode.entries.map { it.label },
+                selectedIndex = ThemeMode.entries.indexOf(settings.themeMode),
+                onSelect = { onChange(settings.copy(themeMode = ThemeMode.entries[it])) },
+            )
+            Spacer(Modifier.height(MagicSpacing.xs))
+            MagicCaption("「跟随系统」会随手机的深色模式自动切换。")
+            Spacer(Modifier.height(MagicSpacing.cardPadding))
+
             MagicLabel("玻璃质感")
             Spacer(Modifier.height(MagicSpacing.row))
             MagicSegmentedControl(

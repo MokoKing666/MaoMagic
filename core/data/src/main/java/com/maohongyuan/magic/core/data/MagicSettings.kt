@@ -14,6 +14,14 @@ enum class GlassQuality(val label: String, val description: String) {
     OFF("关闭", "实色表面，性能最省"),
 }
 
+/** 明暗模式 */
+enum class ThemeMode(val label: String) {
+    /** 跟随系统（默认） */
+    SYSTEM("跟随系统"),
+    LIGHT("浅色"),
+    DARK("深色"),
+}
+
 /** 吉凶配色方案 */
 enum class ColorScheme(val label: String) {
     /** 中式：吉=红、凶=绿 */
@@ -32,6 +40,10 @@ enum class ColorScheme(val label: String) {
 @Serializable
 data class MagicSettings(
     // ── 外观 ──
+    /**
+     * 明暗模式。默认跟随系统 —— 用户没主动选过时，不该替他决定。
+     */
+    val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val glassQuality: GlassQuality = GlassQuality.FULL,
     val colorScheme: ColorScheme = ColorScheme.CHINESE,
     /**
