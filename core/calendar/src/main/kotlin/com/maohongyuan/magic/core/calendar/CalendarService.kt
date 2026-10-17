@@ -32,6 +32,28 @@ object CalendarService {
     fun of(solar: Solar): DayInfo = fromLunar(solar.lunar, solar)
 
     /**
+     * 最近一个**已过**的节气名。
+     *
+     * ⚠️ `DayInfo.jieQi` 只在「当天就是节气日」时非空 —— 一年 365 天里只有 24 天有值。
+     * 但盘面上要显示的是「现在处于哪个节气」，比如 10-17 该显示「寒露」。
+     * 所以要往回找。
+     *
+     * 往回扫最多 16 天：两个节气之间最长约 16 天，一定命中。
+     *
+     * 这是**权宜实现** —— lunar 库有 `prevJieQi`，只是本模块没暴露。
+     * 单次调用最多 16 次历法计算，可接受；后续应改为直接调库。
+     */
+    fun recentJieQi(year: Int, month: Int, day: Int): String? {
+        val base = java.time.LocalDate.of(year, month, day)
+        for (back in 0..16) {
+            val d = base.minusDays(back.toLong())
+            val jq = runCatching { of(d.year, d.monthValue, d.dayOfMonth, 12).jieQi }.getOrNull()
+            if (!jq.isNullOrBlank()) return jq
+        }
+        return null
+    }
+
+    /**
      * 按**农历**取某一天的信息。
      *
      * 八字页允许用户按农历填生辰，但排盘内核一律吃公历 ——

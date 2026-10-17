@@ -138,6 +138,15 @@ data class LiuYaoChart(
     val dayGanZhi: GanZhi,
     val xunKong: XunKong,
     val question: String,
+    /**
+     * 起卦当日的节气名（非节气日取「最近一个已过的节气」）。
+     *
+     * 六爻断卦里节气不如日辰、月建重要，但它是**月建为何是这一支**的依据，
+     * 摆在盘面上能解释「为什么现在是戌月」。
+     *
+     * 可为 null：历法数据缺失或调用方未提供时，界面上不显示这一行。
+     */
+    val jieQi: String? = null,
 ) : DivinationChart {
     override val system: DivinationSystem = DivinationSystem.LIU_YAO
 
@@ -181,6 +190,7 @@ object LiuYaoDivination {
         monthBranch: EarthlyBranch,
         movingIndexes: Set<Int> = emptySet(),
         question: String = "",
+        jieQi: String? = null,
     ): LiuYaoChart {
         require(movingIndexes.all { it in 0..5 }) { "动爻位置必须在 0..5" }
 
@@ -240,6 +250,7 @@ object LiuYaoDivination {
             dayGanZhi = dayGanZhi,
             xunKong = xunKong,
             question = question,
+            jieQi = jieQi,
         )
     }
 

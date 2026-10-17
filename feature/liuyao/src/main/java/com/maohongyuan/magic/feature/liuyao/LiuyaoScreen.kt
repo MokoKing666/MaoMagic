@@ -673,6 +673,8 @@ private fun HexagramCard(chart: LiuYaoChart) {
         // 缺的两项（节气、神煞）当前 LiuYaoChart 里没有字段，未做。
         InfoRow("事项", chart.question.ifBlank { "未填写" })
         InfoRow("月建", "${chart.monthBranch.label}月")
+        // 节气解释「为什么现在是这个月建」—— 月建按节气换，不是按农历月
+        chart.jieQi?.let { InfoRow("节气", it) }
         InfoRow("日辰", "${chart.dayGanZhi}　旬空 ${chart.xunKong.first.label}${chart.xunKong.second.label}")
         InfoRow("卦式", chart.palace.summary)
         Spacer(Modifier.height(MagicSpacing.cardPadding))

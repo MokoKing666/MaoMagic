@@ -280,6 +280,8 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
             monthBranch = monthBranch,
             movingIndexes = result.movingIndexes,
             question = state.question,
+            // 用「最近已过的节气」，不是 day.jieQi —— 后者只有节气当天才有值
+            jieQi = CalendarService.recentJieQi(day.solar.year, day.solar.month, day.solar.day),
         )
         state = state.copy(chart = chart, interpretation = null)
         interpret(chart)
