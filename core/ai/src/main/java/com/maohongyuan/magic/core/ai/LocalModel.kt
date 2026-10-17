@@ -32,6 +32,18 @@ enum class LocalModel(
     val note: String,
     /** sha256。为空表示尚未登记 —— 下载后只校验大小，不校验内容 */
     val sha256: String? = null,
+    /**
+     * 这个变体**只在这些 SoC 上**能用。空集表示通用（不依赖 NPU）。
+     *
+     * ⚠️ NPU 模型是按具体 SoC 的 NPU 编译的，**换一代就不兼容**。
+     * `qualcomm_sm8750` 只认骁龙 8 Elite（SM8750）；
+     * 塞给 8 Elite Gen 5（SM8850）或 Gen 6 大概率初始化失败 ——
+     * 用户会白下 2.9 GB，然后看到报错。
+     *
+     * 所以判断不能是「只要是骁龙就用骁龙版」，
+     * 必须是「SoC 精确命中才用，否则退 GPU」。
+     */
+    val npuSocCodes: Set<String> = emptySet(),
 ) {
     /**
      * 骁龙 8 Elite（SM8750）NPU 专用。
@@ -43,7 +55,10 @@ enum class LocalModel(
         fileName = "gemma-4-E2B-it_qualcomm_sm8750.litertlm",
         sizeBytes = 2_877L * 1024 * 1024,
         label = "骁龙专用",
-        note = "NPU 加速，最快。仅骁龙 8 Elite 可用。",
+        note = "NPU 加速，最快。仅骁龙 8 Elite（SM8750）可用。",
+        // 官方只发布了 SM8750 这一版。8 Elite Gen 5 / Gen 6 暂无对应文件，
+        // 不能复用 —— NPU 模型不向前兼容。
+        npuSocCodes = setOf("SM8750", "SM8750P", "SM8750-AB"),
     ),
 
     /** GPU 版：绝大多数 Android 的首选 */
@@ -79,10 +94,24 @@ enum class LocalModel(
          *
          * @return 按优先级排好的候选，第一个是推荐
          */
+        /**
+         * 按设备排优先级。
+         *
+         * 规则只有一条：**NPU 版只在 SoC 精确命中它的 `npuSocCodes` 时进候选**。
+         *
+         * 为什么不做「骁龙就用骁龙版」：
+         * NPU 模型针对具体 NPU 编译，8 Elite（SM8750）的文件拿到
+         * 8 Elite Gen 5 / Gen 6 上跑不起来。让用户下 2.9 GB 再失败，
+         * 比一开始就给 GPU 版糟糕得多。
+         *
+         * 新增机型支持的方式：官方发布对应 SoC 的 `.litertlm` 后，
+         * 新建一个 [LocalModel] 条目并填好 `npuSocCodes`。
+         */
         fun candidatesFor(device: DeviceProfile = DeviceProfile.current()): List<LocalModel> {
             val list = mutableListOf<LocalModel>()
-            // NPU 版只在 SoC 精确匹配时才推荐
-            if (device.isSnapdragon8Elite) list += QUALCOMM_SM8750
+            values()
+                .filter { it.npuSocCodes.isNotEmpty() && device.socModel.uppercase() in it.npuSocCodes.map(String::uppercase) }
+                .forEach { list += it }
             list += GPU
             list += GENERIC
             return list
@@ -101,21 +130,34 @@ data class DeviceProfile(
     val socModel: String,
     val socManufacturer: String,
 ) {
-    /** 骁龙 8 Elite 的 SoC 代号是 SM8750 */
+    /** 骁龙 8 Elite（SM8750）—— 目前唯一有官方 NPU 模型的机型 */
     val isSnapdragon8Elite: Boolean
         get() = socModel.equals("SM8750", ignoreCase = true) ||
             socModel.equals("SM8750P", ignoreCase = true)
 
+    /**
+     * 是否高通平台。
+     *
+     * ⚠️ **注意：是高通 ≠ 能用骁龙专用模型。**
+     * 8 Elite Gen 5（SM8850）、Gen 6 都是高通，但目前没有对应的 `.litertlm`。
+     * 这类机型应走 GPU 版 —— Adreno 的 GPU delegate 表现通常很好。
+     */
     val isQualcomm: Boolean
         get() = socManufacturer.equals("QTI", ignoreCase = true) ||
             socManufacturer.contains("Qualcomm", ignoreCase = true)
 
-    /** 给用户看的摘要 */
+    /** 给用户看的摘要。诊断问题时让用户截图这一行就够了。 */
     val summary: String
         get() = buildString {
             append(socManufacturer.ifBlank { "未知厂商" })
             append(" ")
             append(socModel.ifBlank { "未知型号" })
+            val pick = LocalModel.candidatesFor(this@DeviceProfile).firstOrNull()
+            if (pick != null) {
+                append(" · 推荐「")
+                append(pick.label)
+                append("」")
+            }
         }
 
     companion object {
