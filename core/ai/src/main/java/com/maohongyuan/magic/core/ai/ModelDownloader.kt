@@ -1,5 +1,6 @@
 package com.maohongyuan.magic.core.ai
 
+import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -203,7 +204,23 @@ class ModelDownloader(
         File(dir, model.fileName).takeIf { it.exists() && it.length() == model.sizeBytes }
 
     companion object {
-        /** 模型目录：应用私有存储，不占用户可见空间 */
+        /**
+         * 模型目录。
+         *
+         * ⚠️ **用 getExternalFilesDir，不是 getFilesDir。**
+         * `getFilesDir()` 落在 `/data/data/<pkg>/files/` —— Android 上任何文件管理器
+         * 都看不到，连 adb 都要 `run-as`。用户想备份、想换包复用、想手动放模型，
+         * 全都做不到。
+         *
+         * `getExternalFilesDir()` 落在 `/sdcard/Android/data/<pkg>/files/` ——
+         * adb 可直接访问，多数文件管理器也能进。Android 11+ 系统文件管理器
+         * 默认隐藏 Android/data，但至少路径是「真实文件路径」，
+         * 推理库需要的就是真实路径（MediaStore 给的是 URI，用不了）。
+         */
+        fun modelDir(context: Context): File =
+            File(context.getExternalFilesDir(null) ?: context.filesDir, "models")
+
+        /** 兼容旧调用：直接给一个基目录 */
         fun modelDir(appFilesDir: File): File = File(appFilesDir, "models")
 
         private fun defaultClient(): OkHttpClient = OkHttpClient.Builder()

@@ -52,7 +52,7 @@ internal fun SmartDivinationSection() {
     // 4 是默认；CDN 单连接限速时加到 8 有用，弱网下减到 2 更稳。
     var segments by remember { mutableStateOf(4) }
     val downloader = remember(segments) { ModelDownloader(segments = segments) }
-    val dir = remember { ModelDownloader.modelDir(context.filesDir) }
+    val dir = remember { ModelDownloader.modelDir(context) }
     // 删除后要让 installed 失效 —— 用这个计数触发重组。
     // 必须声明在 installed 之前，否则作用域不对。
     var generation by remember { mutableStateOf(0) }

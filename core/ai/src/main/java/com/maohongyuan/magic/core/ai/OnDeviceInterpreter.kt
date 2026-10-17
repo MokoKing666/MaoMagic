@@ -147,7 +147,7 @@ class OnDeviceInterpreter(
         fun fromDevice(context: Context): OnDeviceInterpreter {
             val device = DeviceProfile.current()
             val model = LocalModel.candidatesFor(device).first()
-            val dir = ModelDownloader.modelDir(context.filesDir)
+            val dir = ModelDownloader.modelDir(context)
             val file = File(dir, model.fileName)
             val exists = file.exists()
             Log.i(
