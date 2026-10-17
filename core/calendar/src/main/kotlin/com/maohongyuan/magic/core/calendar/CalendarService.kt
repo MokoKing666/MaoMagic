@@ -31,6 +31,28 @@ object CalendarService {
 
     fun of(solar: Solar): DayInfo = fromLunar(solar.lunar, solar)
 
+    /**
+     * 按**农历**取某一天的信息。
+     *
+     * 八字页允许用户按农历填生辰，但排盘内核一律吃公历 ——
+     * 换算只在这一层做，上层不必知道。
+     *
+     * [lunarMonth] 传负数表示闰月（lunar 库约定：闰五月 = -5）。
+     * 闰月是真实存在的输入（有人就生在闰五月），不能只接受 1..12。
+     *
+     * @throws IllegalArgumentException 该农历日期不存在（如闰月填错、月大月小不符）
+     */
+    fun ofLunar(
+        lunarYear: Int,
+        lunarMonth: Int,
+        lunarDay: Int,
+        hour: Int,
+        minute: Int = 0,
+    ): DayInfo {
+        val solar = Lunar.fromYmd(lunarYear, lunarMonth, lunarDay).solar
+        return of(Solar.fromYmdHms(solar.year, solar.month, solar.day, hour, minute, 0))
+    }
+
     private fun fromLunar(lunar: Lunar, solar: Solar): DayInfo {
         val rawMonth = lunar.month
 

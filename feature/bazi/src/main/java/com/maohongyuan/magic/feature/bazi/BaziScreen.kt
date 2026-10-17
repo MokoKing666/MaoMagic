@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maohongyuan.magic.core.calendar.BaZiChart
 import com.maohongyuan.magic.core.calendar.BaZiService
+import com.maohongyuan.magic.core.calendar.CalendarService
 import com.maohongyuan.magic.core.calendar.Gender
 import com.maohongyuan.magic.core.interpret.BaZiRuleEngine
 import com.maohongyuan.magic.core.interpret.Interpretation
@@ -77,6 +78,8 @@ fun BaziScreen(scrollState: ScrollState) {
     val wuXing = LocalMagicWuXing.current
     val scope = rememberCoroutineScope()
 
+    // 输入口径。默认公历 —— 大多数人不记得自己的农历生日。
+    var useLunar by remember { mutableStateOf(false) }
     var year by remember { mutableStateOf("1990") }
     var month by remember { mutableStateOf("6") }
     var day by remember { mutableStateOf("15") }
@@ -93,16 +96,35 @@ fun BaziScreen(scrollState: ScrollState) {
         val m = month.toIntOrNull()
         val d = day.toIntOrNull()
         val h = hour.toIntOrNull()
+        // 农历模式下月份允许负数（闰月），故校验分开写
+        val monthOk = if (useLunar) (m != null && (m in 1..12 || m in -12..-1)) else (m != null && m in 1..12)
         if (y == null || m == null || d == null || h == null ||
-            m !in 1..12 || d !in 1..31 || h !in 0..23 || y !in 1900..2100
+            !monthOk || d !in 1..31 || h !in 0..23 || y !in 1900..2100
         ) {
-            error = "请检查生辰：年 1900–2100，月 1–12，日 1–31，时 0–23"
+            error = if (useLunar) {
+                "请检查农历生辰：年 1900–2100，月 1–12（闰月填负数如 -5），日 1–30，时 0–23"
+            } else {
+                "请检查公历生辰：年 1900–2100，月 1–12，日 1–31，时 0–23"
+            }
             chart = null
             interpretation = null
             return
         }
         error = null
-        val c = runCatching { BaZiService.chart(y, m, d, h, gender = gender) }.getOrNull()
+        // 排盘内核只吃公历：农历输入先在这一步换算。
+        // 换算失败（如闰月填错、月大月小不符）由 runCatching 兜住，不会崩。
+        val c = runCatching {
+            val solar = if (useLunar) {
+                val info = CalendarService.ofLunar(y, m, d, h)
+                Triple(info.solar.year, info.solar.month, info.solar.day)
+            } else {
+                Triple(y, m, d)
+            }
+            BaZiService.chart(solar.first, solar.second, solar.third, h, gender = gender)
+        }.getOrElse {
+            if (useLunar) error = "这个农历日期不存在（闰月或月大月小不符），请核对"
+            null
+        }
         chart = c
         interpretation = null
         if (c != null) {
@@ -122,10 +144,22 @@ fun BaziScreen(scrollState: ScrollState) {
             MagicSectionTitle("生辰")
             Spacer(Modifier.height(MagicSpacing.xs))
             // 输入口径必须写明 —— 公历/农历填错会整盘皆错，这是最容易踩的坑
-            MagicCaption("请填【公历（阳历）】出生时间，不是农历。下方会自动换算成农历与干支。")
+            MagicSegmentedControl(
+                options = listOf("公历", "农历"),
+                selectedIndex = if (useLunar) 1 else 0,
+                onSelect = { useLunar = it == 1 },
+            )
+            Spacer(Modifier.height(MagicSpacing.xs))
+            MagicCaption(
+                if (useLunar) {
+                    "按【农历】填写。闰月请填负数，如闰五月填 -5。排盘前会自动换算成公历。"
+                } else {
+                    "按【公历（阳历）】填写。下方会自动换算成农历与干支。"
+                }
+            )
             Spacer(Modifier.height(MagicSpacing.md))
             Row(horizontalArrangement = Arrangement.spacedBy(MagicSpacing.row)) {
-                FieldBox("公历年", year, { year = it }, Modifier.weight(1.4f))
+                FieldBox(if (useLunar) "农历年" else "公历年", year, { year = it }, Modifier.weight(1.4f))
                 FieldBox("月", month, { month = it }, Modifier.weight(1f))
                 FieldBox("日", day, { day = it }, Modifier.weight(1f))
                 FieldBox("时", hour, { hour = it }, Modifier.weight(1f))
