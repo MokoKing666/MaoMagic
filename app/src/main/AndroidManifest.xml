@@ -5,6 +5,15 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
+    <!--
+      LiteRT-LM 官方文档要求的原生库声明。
+
+      没有这两行，应用命名空间里看不到厂商的 libOpenCL.so，
+      GPU 后端只能退回 OpenGL ES（能用但慢一档），NPU 也起不来。
+
+      required="false" 是必须的：设备没有这些库时应用仍要能装、能跑，
+      所以不能写成必需依赖。
+    -->
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -14,6 +23,11 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.MaoXianHuanShu">
+        <!-- LiteRT-LM 官方文档要求：让厂商原生库对应用命名空间可见。
+             没有这两行，libOpenCL.so 加载不了，GPU 只能退回 OpenGL ES，
+             NPU 也起不来。required=false —— 设备没有时应用仍要能装能跑。 -->
+        <uses-native-library android:name="libvndksupport.so" android:required="false" />
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
 
         <activity
             android:name=".MainActivity"

@@ -49,4 +49,7 @@ dependencies {
     // 本机 OpenCL 不可达（驱动不在白名单），但 GLES 可用 ——
     // 加上它，LiteRT-LM 的 GPU 后端可能走 GL 而不是 CL。
     implementation("com.google.ai.edge.litert:litert-gpu:2.3.0")
+    // LiteRT 核心运行时。官方 sample 里显式声明了它，
+    // litert-gpu 的加速器要链接它；不显式写会被动依赖，版本不可控。
+    implementation("com.google.ai.edge.litert:litert:2.3.0")
 }
