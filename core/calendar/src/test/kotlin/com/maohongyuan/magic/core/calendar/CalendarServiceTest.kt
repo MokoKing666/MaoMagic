@@ -37,9 +37,12 @@ class CalendarServiceTest {
     }
 
     @Test
-    fun `非节气日 jieQi 为空`() {
+    fun `非节气日 jieQi 给出当前所处节气`() {
+        // 语义变更：迁移到 tyme 后，jieQi 不再是「今天是不是节气」，
+        // 而是「现在处于哪个节气」—— 这正是盘面要显示的东西。
+        // 2024-02-20 在雨水（2/19）与惊蛰（3/5）之间，故为「雨水」。
         val day = CalendarService.of(2024, 2, 20)
-        assertEquals(null, day.jieQi)
+        assertEquals("雨水", day.jieQi)
     }
 
     @Test

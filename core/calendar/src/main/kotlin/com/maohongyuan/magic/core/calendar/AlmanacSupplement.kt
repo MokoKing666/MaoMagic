@@ -129,6 +129,9 @@ object AlmanacSupplement {
 
     fun xiuLuck(xiuName: String): String = XIU_LUCK[xiuName] ?: ""
 
+    /** 生肖。按地支取，**不要用 tyme 的 getTwenty()** —— 那是三元九运，不是生肖。 */
+    fun zodiac(branch: EarthlyBranch): String = ZODIAC[branch.ordinal]
+
     /** 农历月名。1..12 → 正/二/…/十/冬/腊。闰月由调用方加「闰」字。 */
     private val MONTH_NAMES = listOf(
         "正", "二", "三", "四", "五", "六", "七", "八", "九", "十", "冬", "腊",
