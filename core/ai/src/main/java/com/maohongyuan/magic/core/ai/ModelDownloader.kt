@@ -1,6 +1,9 @@
 package com.maohongyuan.magic.core.ai
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
@@ -22,29 +25,35 @@ sealed interface DownloadState {
 }
 
 /**
- * 模型下载器。
+ * 模型下载器 —— **多线程分片**。
  *
- * ── 不需要服务器 ──
- * 模型由魔搭托管（阿里 CDN），公开仓库无需鉴权，直链实测支持断点续传。
+ * ── 为什么要分片 ──
+ * 单连接跑不满带宽（实测魔搭 CDN 单连接不到 10 MB/s）。
+ * 切成 4 段并行，各自发 `Range` 请求，通常能显著提速。
+ *
+ * ── 为什么用预分配 + 侧车文件，而不是分片各写一个文件 ──
+ * 分片文件最后要合并，1.9 GB 合并时**峰值要 2 倍空间**（3.8 GB）。
+ * 手机上这个代价太大。
+ *
+ * 所以：先 `setLength(总大小)` 预分配，各线程按偏移写入；
+ * 每个分片的进度单独记在 `.segs` 侧车文件里 —— 中断后能精确续传，
+ * 且不需要额外的大空间。
  *
  * ── 一个必须遵守的细节 ──
  * **不能缓存 CDN 直链。** 魔搭的 API 地址会 302 到带 `auth_key` 签名的 CDN 链接，
- * 那个签名会过期。所以每次都从 [LocalModel.downloadUrl] 请求，让 OkHttp 自己跟随重定向。
- *
- * ── 为什么先写 .part ──
- * 下到一半被杀进程（用户切后台、系统回收），半截文件如果直接叫正式文件名，
- * 下次会当成「已下载」去加载 —— 结果是模型损坏、推理崩。
- * 所以固定写 `.part`，完整后再改名。
+ * 签名会过期。所以每次都从 [LocalModel.downloadUrl] 请求，让 OkHttp 自己跟随重定向。
  */
 class ModelDownloader(
     private val client: OkHttpClient = defaultClient(),
+    /** 分片数。4 在多数网络下已能跑满带宽，再多收益递减且更容易触发风控 */
+    private val segments: Int = 4,
 ) {
 
     /**
      * 下载模型到 [dir]。
      *
      * 已存在且大小正确的文件直接返回 [DownloadState.Done]，不重复下。
-     * 存在 `.part` 则从断点续传。
+     * 存在侧车文件则从各分片断点续传。
      */
     fun download(model: LocalModel, dir: File): Flow<DownloadState> = flow {
         val target = File(dir, model.fileName)
@@ -58,75 +67,124 @@ class ModelDownloader(
             return@flow
         }
 
-        val part = File(dir, "${model.fileName}.part")
-        var downloaded = if (part.exists()) part.length() else 0L
-
-        // 已下完但没改名（上次在改名之前被杀）
-        if (downloaded == model.sizeBytes && model.sizeBytes > 0) {
-            if (part.renameTo(target)) {
-                emit(DownloadState.Done(target))
-                return@flow
-            }
-        }
-
-        val request = Request.Builder()
-            .url(model.downloadUrl)
-            .apply {
-                if (downloaded > 0) header("Range", "bytes=$downloaded-")
-            }
-            .build()
-
-        val response = runCatching { client.newCall(request).execute() }
-            .getOrElse {
-                emit(DownloadState.Failed("连接失败：${it.message}"))
-                return@flow
-            }
-
-        response.use { resp ->
-            // 206 = 续传成功；200 = 服务器忽略了 Range，要从头来
-            if (resp.code == 200 && downloaded > 0) {
-                downloaded = 0L
-                part.delete()
-            }
-            if (resp.code !in listOf(200, 206)) {
-                emit(DownloadState.Failed("服务器返回 ${resp.code}"))
-                return@flow
-            }
-
-            val body = resp.body ?: run {
-                emit(DownloadState.Failed("响应为空"))
-                return@flow
-            }
-            val total = model.sizeBytes.takeIf { it > 0 }
-                ?: (downloaded + body.contentLength())
-
-            RandomAccessFile(part, "rw").use { out ->
-                out.seek(downloaded)
-                body.byteStream().use { input ->
-                    val buf = ByteArray(64 * 1024)
-                    while (true) {
-                        val n = input.read(buf)
-                        if (n <= 0) break
-                        out.write(buf, 0, n)
-                        downloaded += n
-                        emit(DownloadState.Progress(downloaded, total))
-                    }
-                }
-            }
-        }
-
-        // 大小校验：sha256 未登记时，这是唯一的完整性检查
-        if (model.sizeBytes > 0 && part.length() != model.sizeBytes) {
-            emit(DownloadState.Failed("大小不符：期望 ${model.sizeBytes}，实际 ${part.length()}"))
+        val total = model.sizeBytes
+        if (total <= 0) {
+            emit(DownloadState.Failed("模型大小未登记，无法分片下载"))
             return@flow
         }
 
+        val part = File(dir, "${model.fileName}.part")
+        val sidecar = File(dir, "${model.fileName}.segs")
+
+        // 预分配 —— 稀疏文件，长度立刻正确
+        if (!part.exists() || part.length() != total) {
+            RandomAccessFile(part, "rw").use { it.setLength(total) }
+            sidecar.delete()   // 长度变了说明是新的下载，旧进度作废
+        }
+
+        val segRanges = split(total)
+        val done = readSidecar(sidecar, segRanges.size)
+
+        emit(DownloadState.Progress(done.sum(), total))
+
+        val ok = coroutineScope {
+            segRanges.mapIndexed { i, range ->
+                async(Dispatchers.IO) {
+                    if (done[i] >= range.len) return@async true
+                    fetchSegment(model, part, range, i, done[i], sidecar, done)
+                }
+            }.awaitAll()
+        }
+
+        if (ok.any { !it }) {
+            emit(DownloadState.Failed("部分分片下载失败，已保留进度，可重试"))
+            return@flow
+        }
+
+        if (part.length() != total) {
+            emit(DownloadState.Failed("大小不符：期望 $total，实际 ${part.length()}"))
+            return@flow
+        }
+
+        sidecar.delete()
         if (!part.renameTo(target)) {
             emit(DownloadState.Failed("重命名失败：${part.absolutePath}"))
             return@flow
         }
         emit(DownloadState.Done(target))
     }.flowOn(Dispatchers.IO)
+
+    /** 下载一个分片。返回是否成功 */
+    private fun fetchSegment(
+        model: LocalModel,
+        part: File,
+        range: LongRange,
+        index: Int,
+        alreadyDone: Long,
+        sidecar: File,
+        done: LongArray,
+    ): Boolean {
+        val start = range.first + alreadyDone
+        if (start > range.last) return true
+
+        val request = Request.Builder()
+            .url(model.downloadUrl)
+            .header("Range", "bytes=$start-${range.last}")
+            .build()
+
+        val resp = runCatching { client.newCall(request).execute() }.getOrNull() ?: return false
+        resp.use { r ->
+            // 206 = 分片成功。200 说明服务器忽略了 Range，分片策略失效
+            if (r.code != 206) return false
+            val body = r.body ?: return false
+
+            RandomAccessFile(part, "rw").use { out ->
+                out.seek(start)
+                body.byteStream().use { input ->
+                    val buf = ByteArray(64 * 1024)
+                    var pos = start
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        out.write(buf, 0, n)
+                        pos += n
+                        done[index] = pos - range.first
+                        writeSidecar(sidecar, done)
+                    }
+                }
+            }
+        }
+        return done[index] >= range.len
+    }
+
+    /** 分片字节数 */
+    private val LongRange.len: Long get() = last - first + 1
+
+    /** 均分，余数给最后一片 */
+    private fun split(total: Long): List<LongRange> {
+        val per = total / segments
+        return (0 until segments).map { i ->
+            val from = i * per
+            val to = if (i == segments - 1) total - 1 else (i + 1) * per - 1
+            from..to
+        }
+    }
+
+    private fun readSidecar(file: File, n: Int): LongArray {
+        val arr = LongArray(n)
+        if (!file.exists()) return arr
+        runCatching {
+            file.readText().trim().split(",").forEachIndexed { i, s ->
+                if (i < n) arr[i] = s.trim().toLongOrNull() ?: 0L
+            }
+        }
+        return arr
+    }
+
+    private fun writeSidecar(file: File, done: LongArray) {
+        // 每 64 KB 写一次，频率可接受；写失败不影响下载本身
+        runCatching { file.writeText(done.joinToString(",")) }
+    }
 
     /** 已下载的模型 */
     fun installed(dir: File, model: LocalModel): File? =
