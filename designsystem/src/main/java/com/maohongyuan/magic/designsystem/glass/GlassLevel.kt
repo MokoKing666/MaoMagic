@@ -66,12 +66,12 @@ data class GlassLevel(
         val Thick = GlassLevel(
             // blur 8dp / lens 12·24 —— 照抄 Kyant0 LiquidBottomTabs 与 LiquidButton。
             // 原来 blur 24dp 是「三倍厚度」，玻璃被糊成磨砂，反而不像玻璃。
+            // 照抄 Kyant0 LiquidBottomTabs：blur 8dp / lens 24·24
             blur = 8.dp,
-            lensHeight = 12.dp,
+            lensHeight = 24.dp,
             lensAmount = 24.dp,
-            // 遮罩从 0.62 降到 0.34：0.62 的白把折射盖掉了，
-            // 玻璃感来自 lens 的折射，不是靠糊一层白。
-            surfaceAlphaLight = 0.34f,
+            // 照抄 containerColor：近白 40% / 近黑 40%
+            surfaceAlphaLight = 0.40f,
             surfaceAlphaDark = 0.40f,
         )
 
@@ -83,10 +83,11 @@ data class GlassLevel(
          * blur 24 + 高饱和 是玻璃质感的来源，靠它保住「玻璃感」而不是靠降低不透明度。
          */
         val Regular = GlassLevel(
+            // 介于 LiquidButton 与 LiquidBottomTabs 之间：blur 8dp / lens 12·24
             blur = 8.dp,
             lensHeight = 12.dp,
             lensAmount = 24.dp,
-            surfaceAlphaLight = 0.34f,
+            surfaceAlphaLight = 0.40f,
             surfaceAlphaDark = 0.40f,
         )
 
