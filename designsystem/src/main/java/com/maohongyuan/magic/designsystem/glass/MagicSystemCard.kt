@@ -53,7 +53,7 @@ fun MagicSystemCard(
     // 不必退到 contentModifier（那会连内容一起缩放，不是「玻璃被按下」）。
     GlassCard(
         modifier = modifier.clip(shapes.card),
-        level = GlassLevel.Thin,
+        level = GlassLevel.Regular,
         press = rememberGlassPress(),
         onClick = onClick,
     ) {

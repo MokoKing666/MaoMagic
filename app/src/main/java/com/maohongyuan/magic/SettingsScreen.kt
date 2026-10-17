@@ -45,7 +45,7 @@ import com.maohongyuan.magic.designsystem.glass.MagicLabel
 import androidx.compose.ui.text.input.KeyboardType
 import com.maohongyuan.magic.designsystem.glass.MagicTextField
 import com.maohongyuan.magic.designsystem.glass.MagicListRow
-import com.maohongyuan.magic.designsystem.glass.MagicSegmentedControl
+import com.maohongyuan.magic.designsystem.glass.MagicLiquidSegmentedControl
 import com.maohongyuan.magic.designsystem.glass.MagicSolidButton
 import com.maohongyuan.magic.designsystem.glass.LocalContentBackdrop
 import com.maohongyuan.magic.designsystem.theme.LocalMagicColors
@@ -86,7 +86,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(MagicSpacing.row))
             // 三档分开：本地模型与云端 AI 是两件事，混成「智能模式」用户分不清
             // 数据去了哪里、要不要联网。
-            MagicSegmentedControl(
+            MagicLiquidSegmentedControl(
                 options = listOf("自动", "基础", "本地模型", "云端 AI"),
                 selectedIndex = when (settings.engineTier) {
                     "RULE" -> 1
@@ -191,7 +191,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(MagicSpacing.row))
             // 机型检测只用来「推荐」，最终由用户决定 ——
             // 有些 ROM 会改写 SoC 字段，自动判断不一定准。
-            MagicSegmentedControl(
+            MagicLiquidSegmentedControl(
                 options = InferencePrefs.BackendPref.entries.map { it.label },
                 selectedIndex = InferencePrefs.BackendPref.entries
                     .indexOf(InferencePrefs.BackendPref.of(settings.inferenceBackend)),
@@ -213,7 +213,7 @@ fun SettingsScreen(
             Spacer(Modifier.height(MagicSpacing.row))
             // 自动推荐只看 SoC，看不出「这台机器有没有 OpenCL」——
             // GPU 版只含 GPU 编译图，无 OpenCL 的设备必须手动选通用版。
-            MagicSegmentedControl(
+            MagicLiquidSegmentedControl(
                 options = listOf("自动", "GPU 版", "通用版"),
                 selectedIndex = when (settings.modelVariant) {
                     "GPU" -> 1
@@ -248,7 +248,7 @@ fun SettingsScreen(
         Section("外观") {
             MagicLabel("模式")
             Spacer(Modifier.height(MagicSpacing.row))
-            MagicSegmentedControl(
+            MagicLiquidSegmentedControl(
                 options = ThemeMode.entries.map { it.label },
                 selectedIndex = ThemeMode.entries.indexOf(settings.themeMode),
                 onSelect = { onChange(settings.copy(themeMode = ThemeMode.entries[it])) },
@@ -265,7 +265,7 @@ fun SettingsScreen(
         Section("配色") {
             MagicLabel("吉凶配色")
             Spacer(Modifier.height(MagicSpacing.row))
-            MagicSegmentedControl(
+            MagicLiquidSegmentedControl(
                 options = ColorScheme.entries.map { it.label },
                 selectedIndex = ColorScheme.entries.indexOf(settings.colorScheme),
                 onSelect = { onChange(settings.copy(colorScheme = ColorScheme.entries[it])) },

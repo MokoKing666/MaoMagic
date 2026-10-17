@@ -8,6 +8,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -200,10 +201,14 @@ private fun MagicApp() {
                 enter.animateTo(1f, tween(durationMillis = 260, easing = FastOutSlowInEasing))
             }
             Box(
-                modifier = Modifier.graphicsLayer {
-                    alpha = 0.25f + 0.75f * enter.value
-                    translationX = (1f - enter.value) * 28f.dp.toPx()
-                }
+                // ⚠️ 必须 fillMaxSize。少了这行，Box 会 wrap content，
+                // 页面被压成一块圆角白块（实测：进八字页只剩个空胶囊）。
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = 0.25f + 0.75f * enter.value
+                        translationX = (1f - enter.value) * 28f.dp.toPx()
+                    }
             ) {
             when (board) {
                 AppTab.SETTINGS -> {

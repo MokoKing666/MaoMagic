@@ -28,7 +28,7 @@ import com.maohongyuan.magic.designsystem.glass.MagicLabel
 import com.maohongyuan.magic.designsystem.theme.MagicSpacing
 import com.maohongyuan.magic.designsystem.theme.MagicType
 import com.maohongyuan.magic.designsystem.glass.MagicCaption
-import com.maohongyuan.magic.designsystem.glass.MagicSegmentedControl
+import com.maohongyuan.magic.designsystem.glass.MagicLiquidSegmentedControl
 import com.maohongyuan.magic.designsystem.theme.LocalMagicColors
 import kotlinx.coroutines.launch
 
@@ -95,7 +95,7 @@ internal fun SmartDivinationSection() {
 
     // 下载中不让改，避免旧协程拿着旧分片数继续跑
     if (installed == null && !busy) {
-        MagicSegmentedControl(
+        MagicLiquidSegmentedControl(
             options = listOf("2 线程", "4 线程", "8 线程"),
             selectedIndex = when (segments) {
                 2 -> 0

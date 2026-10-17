@@ -174,7 +174,7 @@ fun MagicScaffold(
                                 .size(MagicScaffoldDefaults.IconButtonSize)
                                 .clip(LocalMagicShapes.current.pill),
                             shape = LocalMagicShapes.current.pill,
-                            level = GlassLevel.Thin,
+                            level = GlassLevel.Regular,
                             shadow = false,
                             press = rememberGlassPress(),
                             onClick = onBack,

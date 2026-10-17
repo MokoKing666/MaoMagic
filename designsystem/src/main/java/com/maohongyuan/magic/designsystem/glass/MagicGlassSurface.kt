@@ -7,6 +7,8 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -17,6 +19,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -30,6 +33,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +43,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -50,6 +55,7 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlin.math.roundToInt
+import kotlinx.coroutines.launch
 import com.kyant.backdrop.Backdrop
 import com.kyant.backdrop.drawBackdrop
 import com.kyant.shapes.RoundedRectangularShape
@@ -180,8 +186,11 @@ fun MagicGlassSurface(
         else -> null
     }
 
+    // ⚠️ 必须在**调用方传进来的 modifier 之上**叠加，不能替换它。
+    // modifier 里带着 .size() / .clip() 这些尺寸与形状约束 ——
+    // 替换掉的话元素会失去约束、撑满父容器（实测：返回键铺满整屏挡住画面）。
     val pressModifier = if (press != null) {
-        Modifier
+        modifier
             .then(
                 if (onClick != null) {
                     Modifier.clickable(
@@ -200,7 +209,7 @@ fun MagicGlassSurface(
     }
 
     Box(
-        modifier = (if (press != null) pressModifier else modifier).drawBackdrop(
+        modifier = pressModifier.drawBackdrop(
             backdrop = resolvedBackdrop,
             shape = { shape },
             // 玻璃层形变：只动玻璃，内容不动
@@ -396,17 +405,13 @@ fun MagicSolidButton(
  * 若也用玻璃就会形成「卡片玻璃 → 控件玻璃 → Tab 栏玻璃」三层嵌套，
  * 层级无法辨认，性能也白白浪费。
  *
- * ── 滑块只有一个 ──
- * 和底栏指示器同一个道理：每个分段各自 `animateColorAsState` 自己的底色，
- * 高亮只会原地淡入淡出。这里改成单个滑块跨分段滑动。
+ * 视觉风格向 [LiquidBottomTabs] 对齐：
+ * - 外壳与滑块均为胶囊形（pill）
+ * - 单个滑块跨分段滑动，带弹簧物理
+ * - 支持点击跳转与拖拽吸附
  *
- * ── 同心圆角 ──
- * 外层 [shape]（12dp）减去内边距 [MagicSpacing.segmentedInset]（2dp）
- * ⇒ 滑块必须是 10dp，即 [thumbShape]。
- * 早期实现内外层都用 12dp，圆心不重合，接缝处出现可见的厚度跳变。
- *
- * @param shape 外层容器圆角，卡片内使用时传 `shapes.controlInCard`
- * @param thumbShape 滑块圆角，必须满足 `r_thumb = r_outer − segmentedInset`
+ * @param shape 外层容器圆角，默认胶囊
+ * @param thumbShape 滑块圆角，默认胶囊
  */
 @Composable
 fun MagicSegmentedControl(
@@ -414,26 +419,26 @@ fun MagicSegmentedControl(
     selectedIndex: Int,
     onSelect: (Int) -> Unit,
     modifier: Modifier = Modifier,
-    shape: Shape = LocalMagicShapes.current.controlInCard,
-    thumbShape: Shape = LocalMagicShapes.current.controlInCardThumb,
+    shape: Shape = LocalMagicShapes.current.pill,
+    thumbShape: Shape = LocalMagicShapes.current.pill,
 ) {
     val colors = LocalMagicColors.current
     val density = LocalDensity.current
     val inset = MagicSpacing.segmentedInset
-    val insetPx = with(density) { inset.toPx() }
+    val scope = rememberCoroutineScope()
 
-    var rowSize by remember { mutableStateOf(IntSize.Zero) }
-    val itemWidthPx = if (options.isEmpty() || rowSize.width <= 0) {
-        0f
-    } else {
-        (rowSize.width - insetPx * (options.size - 1)) / options.size
-    }
+    var boxSize by remember { mutableStateOf(IntSize.Zero) }
+    val count = options.size
+    val itemWidthPx = if (count <= 0 || boxSize.width <= 0) 0f else boxSize.width.toFloat() / count
 
     val thumbX = remember { Animatable(0f) }
     var placed by remember { mutableStateOf(false) }
+    var isDragging by remember { mutableStateOf(false) }
+
     LaunchedEffect(selectedIndex, itemWidthPx) {
+        if (isDragging) return@LaunchedEffect
         if (itemWidthPx <= 0f) return@LaunchedEffect
-        val target = selectedIndex * (itemWidthPx + insetPx)
+        val target = selectedIndex * itemWidthPx
         if (!placed) {
             thumbX.snapTo(target)
             placed = true
@@ -455,26 +460,24 @@ fun MagicSegmentedControl(
                 if (colors.isLight) Color.White.copy(alpha = 0.72f)
                 else Color.Black.copy(alpha = 0.45f)
             )
-            .padding(inset),
+            .padding(inset)
+            .onSizeChanged { boxSize = it },
     ) {
-        // ① 唯一的那一个滑块（先画，在 Row 之下）
-        if (itemWidthPx > 0f && rowSize.height > 0) {
+        // ① 滑块
+        if (itemWidthPx > 0f && boxSize.height > 0) {
             Box(
                 modifier = Modifier
                     .offset { IntOffset(thumbX.value.roundToInt(), 0) }
                     .width(with(density) { itemWidthPx.toDp() })
-                    .height(with(density) { rowSize.height.toDp() })
+                    .height(with(density) { boxSize.height.toDp() })
                     .clip(thumbShape)
                     .background(colors.accent.copy(alpha = 0.12f)),
             )
         }
 
-        // ② 分段只负责文字
+        // ② 分段文字
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .onSizeChanged { rowSize = it },
-            horizontalArrangement = Arrangement.spacedBy(inset),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             options.forEachIndexed { index, label ->
@@ -499,6 +502,43 @@ fun MagicSegmentedControl(
                     )
                 }
             }
+        }
+
+        // ③ 透明交互层（拖拽 + 点击轨道）
+        if (itemWidthPx > 0f) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(itemWidthPx, count) {
+                        detectTapGestures { offset ->
+                            val index = (offset.x / itemWidthPx)
+                                .toInt()
+                                .coerceIn(0, count - 1)
+                            onSelect(index)
+                        }
+                    }
+                    .pointerInput(itemWidthPx, count, boxSize.width) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { isDragging = true },
+                            onDragEnd = {
+                                isDragging = false
+                                val index = (thumbX.value / itemWidthPx + 0.5f)
+                                    .toInt()
+                                    .coerceIn(0, count - 1)
+                                onSelect(index)
+                            },
+                            onHorizontalDrag = { change, dragAmount ->
+                                change.consume()
+                                val raw = thumbX.value + dragAmount
+                                scope.launch {
+                                    thumbX.snapTo(
+                                        raw.coerceIn(0f, boxSize.width - itemWidthPx),
+                                    )
+                                }
+                            },
+                        )
+                    },
+            )
         }
     }
 }
