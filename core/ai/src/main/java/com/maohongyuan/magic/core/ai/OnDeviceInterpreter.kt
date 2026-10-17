@@ -8,8 +8,14 @@ import com.maohongyuan.magic.core.interpret.Interpretation
 import com.maohongyuan.magic.core.interpret.InterpretationRequest
 import com.maohongyuan.magic.core.interpret.InterpretationSection
 import com.maohongyuan.magic.core.interpret.Tone
+import com.maohongyuan.magic.core.interpret.Verdict
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 
 /**
@@ -19,15 +25,22 @@ import java.io.File
  * **它不负责算卦。** 用神、旺衰、旬空、动变爻全部由规则引擎先算好，
  * 通过 [InterpretationRequest.facts] 传进来；本引擎只把这些事实**说成人话**。
  *
- * 这条分工是硬性的：小参数量模型做多步五行生克推理并不可靠，
- * 但它把已经确定的事实写成通顺的中文，做得很好。
+ * ── 输出解析：先试 JSON，失败退纯文本 ──
+ * `ChartPrompt.SYSTEM_PROMPT` 是给云端写的，里面**要求输出 JSON**。
+ * 端上模型照做，所以拿到的通常是：
+ * ```
+ * {"verdict":"…","headline":"…","sections":[{"title":"…","body":"…","tone":"…"}]}
+ * ```
+ * 直接当文本渲染，用户会看到一坨花括号 —— 之前就是这个 bug。
  *
- * ── 为什么不做 JSON 解析 ──
- * 让模型输出 JSON 看似更「结构化」，实际很脆：多一个小括号、多一句开场白，
- * 解析就失败，用户看到的是空白。而这里要的只是**一段话**。
+ * 但也不能假定一定能解析：小模型偶尔会加前言、漏括号。
+ * 所以**先试 JSON，成功就用结构化段落，失败则把原文压成纯文本**，
+ * 两者都不行就返回空 Flow 让降级链落到规则引擎。
  *
- * 所以：**判词与吉凶直接取自 [InterpretationRequest.facts]（算法算的，一定对）**，
- * 模型的输出整段作为「解读」正文。模型写崩了也不会影响判词。
+ * ── 判词不取模型的 ──
+ * `verdict` 与 `headline` **一律用 [InterpretationRequest.facts]** ——
+ * 吉凶是算法算的，不能让模型改。模型的 JSON 里也有 verdict，但那是它的判断，
+ * 与规则引擎冲突时以算法为准。只有 `sections` 是模型写的。
  */
 class OnDeviceInterpreter(
     private val backend: LocalModelBackend? = null,
@@ -46,27 +59,84 @@ class OnDeviceInterpreter(
             userMessage = ChartPrompt.userMessage(request),
         ) ?: return@flow
 
-        // 小模型爱输出 Markdown，界面上不解析 —— 这里压成纯文本
-        val text = PlainText.sanitize(raw)
+        val text = raw.trim()
         if (text.isEmpty()) return@flow
 
-        // 判词、吉凶、用神说明一律取算法结果 —— 模型不参与判断
         val facts = request.facts
+
+        // 1. 结构化优先
+        val structured = runCatching { parseJson(text, facts) }.getOrNull()
+        if (structured != null) {
+            emit(structured)
+            return@flow
+        }
+
+        // 2. 看起来像 JSON 却解析不了 —— 说明模型输出残缺。
+        //    此时把花括号内容当正文渲染只会更糟，直接降级。
+        if (text.startsWith("{") || text.contains("\"sections\"")) {
+            Log.w("MaoMagicLLM", "模型输出像 JSON 但解析失败，降级到规则引擎")
+            return@flow
+        }
+
+        // 3. 纯文本兜底
+        val plain = PlainText.sanitize(text)
+        if (plain.isEmpty()) return@flow
+
         emit(
             Interpretation(
-                verdict = facts?.verdict ?: com.maohongyuan.magic.core.interpret.Verdict.NEUTRAL,
+                verdict = facts?.verdict ?: Verdict.NEUTRAL,
                 headline = facts?.headline ?: "解读",
-                sections = listOf(
-                    InterpretationSection(
-                        title = "解读",
-                        body = text,
-                        tone = Tone.NEUTRAL,
-                    )
-                ),
+                sections = listOf(InterpretationSection("解读", plain, Tone.NEUTRAL)),
                 tier = EngineTier.ON_DEVICE,
                 yongShenNote = facts?.yongShenNote,
             )
         )
+    }
+
+    /**
+     * 解析模型输出的 JSON。
+     *
+     * 容错：模型常在前后加一句「好的，以下是解读：」，所以先截取第一个 `{`
+     * 到最后一个 `}` 之间的内容再解析。
+     */
+    private fun parseJson(raw: String, facts: Interpretation?): Interpretation? {
+        val start = raw.indexOf('{')
+        val end = raw.lastIndexOf('}')
+        if (start < 0 || end <= start) return null
+
+        // 用 kotlinx.serialization 而不是 org.json ——
+        // org.json 在 JVM 单测里是 Android 的空壳实现，测不了。
+        val obj = Json.parseToJsonElement(raw.substring(start, end + 1)).jsonObject
+        val arr = obj["sections"]?.jsonArray ?: return null
+        if (arr.isEmpty()) return null
+
+        val sections = arr.mapNotNull { el ->
+            val s = el.jsonObject
+            val title = s["title"]?.jsonPrimitive?.contentOrNull?.ifBlank { "解读" } ?: "解读"
+            val body = PlainText.sanitize(s["body"]?.jsonPrimitive?.contentOrNull ?: "")
+            if (body.isBlank()) return@mapNotNull null
+            val tone = s["tone"]?.jsonPrimitive?.contentOrNull ?: ""
+            InterpretationSection(title = title, body = body, tone = toneOf(tone))
+        }
+        if (sections.isEmpty()) return null
+
+        return Interpretation(
+            // 判词与吉凶取算法结果，不取模型判断
+            verdict = facts?.verdict ?: Verdict.NEUTRAL,
+            headline = facts?.headline
+                ?: obj["headline"]?.jsonPrimitive?.contentOrNull?.ifBlank { "解读" }
+                ?: "解读",
+            sections = sections,
+            tier = EngineTier.ON_DEVICE,
+            yongShenNote = facts?.yongShenNote,
+        )
+    }
+
+    private fun toneOf(name: String): Tone = when (name.uppercase()) {
+        "POSITIVE" -> Tone.POSITIVE
+        "NEGATIVE" -> Tone.NEGATIVE
+        "WARNING" -> Tone.WARNING
+        else -> Tone.NEUTRAL
     }
 
     companion object {
@@ -98,7 +168,7 @@ class OnDeviceInterpreter(
 /**
  * 端上推理后端的抽象。
  *
- * 抽出来是为了：接 LiteRT-LM 只改一个实现类，不动引擎逻辑；
+ * 抽出来是为了：换运行时只改一个实现类，不动引擎逻辑；
  * 也方便在测试里塞一个假后端验证链路。
  */
 interface LocalModelBackend {

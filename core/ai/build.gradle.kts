@@ -7,6 +7,14 @@ plugins {
 }
 
 android {
+    testOptions {
+        unitTests {
+            // android.util.Log 在 JVM 单测里没有实现，不设这个会抛
+            // "Method w in android.util.Log not mocked"
+            isReturnDefaultValues = true
+        }
+    }
+
     namespace = "com.maohongyuan.magic.core.ai"
     compileSdk = 37
     buildToolsVersion = "36.0.0"

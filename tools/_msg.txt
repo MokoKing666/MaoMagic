@@ -1,31 +1,33 @@
-feat(ai): 端上模型跑通 + 全部系统接入 + 输出压成纯文本
+fix(ai): 解析模型输出的 JSON，不再把花括号显示给用户
 
-用户实测确认六爻已跑出 AI 解读（慢但可用）。反馈三个问题，本提交处理两个。
+用户截图显示解读栏是一整坨 JSON：verdict / headline / sections 原样渲染。
 
-1. 输出是 Markdown，不像给用户看的
-小模型默认爱写加粗、标题、列表符号，而解读是整段塞进一个 Text 组件，
-界面不解析 Markdown —— 用户看到一堆符号。
+## 根因
+ChartPrompt.SYSTEM_PROMPT 是给云端路径写的，里面**要求输出 JSON**。
+端上模型照做，而我的 OnDeviceInterpreter 把输出当纯文本渲染 ——
+PlainText.sanitize 只去 Markdown 标记，不去 JSON 结构。
 
-两边都做：
-- 提示词加【输出格式】：只许纯文本，分点用「·」
-- 客户端兜底 PlainText.sanitize()：去标题井号、去加粗与反引号、
-  列表符号转「·」、去引用与分隔线、链接转文字、连续空行压缩
+## 改法：先解析，解析不了再退纯文本
+1. 截取第一个 { 到最后一个 } 之间的内容（模型常加前言）
+2. kotlinx.serialization 解析成 sections
+3. 成功 → 结构化段落（title/body/tone）
+4. 像 JSON 但解析失败 → **返回空 Flow 降级**，不把残缺 JSON 当正文
+5. 纯文本 → PlainText.sanitize
 
-只靠提示词不保险，只靠清洗又白费 token —— 两者都要。
+## 判词仍取算法结果
+模型的 JSON 里也有 verdict，但**一律用 request.facts 的 verdict 与 headline**。
+吉凶是算法算的，不能让模型改。只有 sections 是模型写的。
 
-2. 只有六爻有 AI，其他功能没有
-根因：每个页面各自拼链，六爻接了，梅花/八字/塔罗/小六壬没接。
-新增 InterpreterChains.standard(context, ruleEngine, cloudConfig) 统一装配。
+## 用 kotlinx.serialization 而不是 org.json
+org.json 在 JVM 单测里是 Android 的空壳实现（returnDefaultValues 下全部返回
+null/0），测试根本测不了。kotlinx.serialization 本来就是依赖，且测试可跑。
 
-链必须 remember —— 否则每次解卦都重建后端、重新加载 2 GB 模型。
+## 单测 7 用例（OnDeviceParseTest）
+标准 JSON / 带前言 / 判词取算法 / 残缺 JSON 降级 / 纯文本清洗 /
+空输出 / sections 空数组
 
-3. 顺带修一个静默失败
-之前的【硬约束】补丁用 trimIndent 做锚点，但 ChartPrompt 的字符串
-结尾没有 trimIndent，补丁静默跳过 —— 模型一直没收到「不许重推卦理」的指令。
-本次改用真实结尾文本做锚点，已确认写入。
+## 顺带
+core:ai 加 testOptions.unitTests.isReturnDefaultValues = true ——
+否则 android.util.Log 在 JVM 单测里抛 not mocked。
 
-未处理：
-- 速度（2B 模型在 Mali GPU 上偏慢，下一步试 NPU）
-- 通知栏进度、欢迎页
-
-279 用例全绿。
+286 用例全绿。
