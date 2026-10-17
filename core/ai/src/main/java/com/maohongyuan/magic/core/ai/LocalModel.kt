@@ -84,9 +84,9 @@ enum class LocalModel(
     /** 通用版：CPU 兜底 */
     GENERIC(
         fileName = "gemma-4-E2B-it.litertlm",
-        sizeBytes = 2_468L * 1024 * 1024,
+        sizeBytes = 2_588_147_712L,   // 实测 Content-Length
         label = "通用",
-        note = "CPU 运行，兼容性最好但最慢。",
+        note = "含 CPU 图，无 OpenCL 的设备只能用它（最慢但能跑）。",
     ),
     ;
 
@@ -119,7 +119,20 @@ enum class LocalModel(
          * 新增机型支持的方式：官方发布对应 SoC 的 `.litertlm` 后，
          * 新建一个 [LocalModel] 条目并填好 `npuSocCodes`。
          */
-        fun candidatesFor(device: DeviceProfile = DeviceProfile.current()): List<LocalModel> {
+        /** 用户手动指定的变体名；AUTO 表示按设备推荐 */
+        fun byName(name: String?): LocalModel? =
+            entries.firstOrNull { it.name == name }
+
+        fun candidatesFor(
+            device: DeviceProfile = DeviceProfile.current(),
+            /** 用户手动指定的变体。非 AUTO 时排在候选最前 */
+            variant: String = "AUTO",
+        ): List<LocalModel> {
+            val manual = byName(variant)?.takeIf { variant != "AUTO" }
+            if (manual != null) {
+                // 手动选定：先用它，失败再按常规顺序兜底
+                return listOf(manual) + candidatesFor(device, "AUTO").filter { it != manual }
+            }
             val list = mutableListOf<LocalModel>()
             values()
                 .filter { it.npuSocCodes.isNotEmpty() && device.socModel.uppercase() in it.npuSocCodes.map(String::uppercase) }

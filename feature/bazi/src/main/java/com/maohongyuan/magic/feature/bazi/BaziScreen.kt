@@ -134,9 +134,13 @@ fun BaziScreen(scrollState: ScrollState) {
         interpretation = null
         if (c != null) {
             scope.launch {
-                interpretation = chain.interpret(
-                    InterpretationRequest("看命盘", chart = c)
-                )
+                val outcome = runCatching {
+                    chain.interpret(InterpretationRequest("看命盘", chart = c))
+                }
+                interpretation = outcome.getOrNull()
+                if (outcome.isFailure) {
+                    error = "所选解卦模式调用失败：${outcome.exceptionOrNull()?.message}"
+                }
             }
         }
     }

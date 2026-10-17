@@ -208,6 +208,39 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(MagicSpacing.cardPadding))
 
+            MagicLabel("模型变体")
+            Spacer(Modifier.height(MagicSpacing.row))
+            // 自动推荐只看 SoC，看不出「这台机器有没有 OpenCL」——
+            // GPU 版只含 GPU 编译图，无 OpenCL 的设备必须手动选通用版。
+            MagicSegmentedControl(
+                options = listOf("自动", "GPU 版", "通用版"),
+                selectedIndex = when (settings.modelVariant) {
+                    "GPU" -> 1
+                    "GENERIC" -> 2
+                    else -> 0
+                },
+                onSelect = {
+                    onChange(
+                        settings.copy(
+                            modelVariant = when (it) {
+                                1 -> "GPU"
+                                2 -> "GENERIC"
+                                else -> "AUTO"
+                            }
+                        )
+                    )
+                },
+            )
+            Spacer(Modifier.height(MagicSpacing.xs))
+            MagicCaption(
+                when (settings.modelVariant) {
+                    "GPU" -> "GPU 版（1.9 GB）：只有 GPU 图，需要设备支持 OpenCL。"
+                    "GENERIC" -> "通用版（2.4 GB）：含 CPU 图，没有 OpenCL 的设备只能用它。"
+                    else -> "自动：按机型推荐。如果提示「找不到 OpenCL」，改选通用版。"
+                }
+            )
+            Spacer(Modifier.height(MagicSpacing.cardPadding))
+
             SmartDivinationSection()
         }
 

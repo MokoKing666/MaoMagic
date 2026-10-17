@@ -34,11 +34,10 @@ interface DivinationInterpreter {
 /**
  * 降级链。
  *
- * 按 [EngineTier.chain] 的顺序依次尝试，取第一个可用的引擎。
- * **保证不会返回 null** —— 链尾的 Tier1 永远可用。
+ * 默认按 [EngineTier.chain] 自动尝试并降级。
+ * 用户明确选择档位时严格使用该档，失败就返回错误，不静默切档。
  *
- * 降级是**正常状态而非错误**：UI 应展示「当前使用基础模式」这类轻量提示，
- * 而不是报警告色。
+ * AUTO 可以静默降级；手动选择不能降级 —— 否则界面显示的模式与用户选择不一致。
  */
 class InterpreterChain(
     private val interpreters: List<DivinationInterpreter>,
@@ -74,25 +73,40 @@ class InterpreterChain(
         preferred: EngineTier? = InferencePrefs.preferredTier,
     ): Interpretation {
         val byPriority = interpreters.sortedBy { EngineTier.chain.indexOf(it.tier) }
-        // 用户选的那一档排到最前；它不可用时仍按原顺序降级 ——
-        // 宁可给一个「不是你选的」结果，也不要什么都不给。
-        val ordered = if (preferred == null) {
-            byPriority
-        } else {
-            byPriority.filter { it.tier == preferred } + byPriority.filter { it.tier != preferred }
-        }
-
         // 规则引擎**总是先算一遍**。
-        //
         // 它零依赖、瞬时完成，算出的用神/旺衰/旬空是确定性的。
-        // 把这份结果作为 [InterpretationRequest.facts] 交给 AI 引擎，
-        // AI 就只做「说人话」，不再自己推卦理 —— 这是防止它编错的关键。
-        val ruleEngine = ordered.firstOrNull { it.tier == EngineTier.RULE }
+        // 把这份结果作为 facts 交给 AI；AI 只做「说人话」，不再自己推卦理。
+        val ruleEngine = byPriority.firstOrNull { it.tier == EngineTier.RULE }
         val facts = ruleEngine?.let { engine ->
             runCatching { engine.interpret(request).firstOrNull() }.getOrNull()
         }
 
-        for (engine in ordered) {
+        // 用户明确选档时，**不允许静默切到另一档**。
+        // 否则用户选了「本地模型」，GPU/NPU 失败后界面却显示「基础模式」，
+        // 既掩盖真实错误，也违背用户选择。让调用方拿到错误并明确展示。
+        if (preferred != null) {
+            val selected = byPriority.firstOrNull { it.tier == preferred }
+                ?: error("当前没有注册「${preferred.label}」引擎")
+            if (!runCatching { selected.isAvailable() }.getOrDefault(false)) {
+                error("所选「${preferred.label}」不可用。请检查模型是否已下载、配置是否完整。")
+            }
+            val effective = if (selected.tier == EngineTier.RULE || facts == null) {
+                request
+            } else {
+                request.copy(facts = facts)
+            }
+            val result = try {
+                selected.interpret(effective).firstOrNull()
+            } catch (t: Throwable) {
+                throw IllegalStateException(
+                    "所选「${preferred.label}」调用失败：${t.message ?: t.javaClass.simpleName}",
+                    t,
+                )
+            }
+            return result ?: error("所选「${preferred.label}」没有返回结果；未切换到其它模式。")
+        }
+
+        for (engine in byPriority) {
             if (!runCatching { engine.isAvailable() }.getOrDefault(false)) continue
             // 规则引擎自己就是算的那一方，不需要再喂一遍
             val effective = if (engine.tier == EngineTier.RULE || facts == null) {

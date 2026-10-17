@@ -53,6 +53,7 @@ data class LiuYaoUiState(
     val chart: LiuYaoChart? = null,
     /** 解卦结果 */
     val interpretation: Interpretation? = null,
+    val interpretationError: String? = null,
     val interpreting: Boolean = false,
     /**
      * 正在查看的历史卦例 id。非 null 表示盘面来自历史记录，
@@ -312,9 +313,9 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun interpret(chart: LiuYaoChart) {
-        state = state.copy(interpreting = true)
+        state = state.copy(interpreting = true, interpretationError = null)
         viewModelScope.launch {
-            val result = runCatching {
+            val outcome = runCatching {
                 chain.interpret(
                     InterpretationRequest(
                         question = state.question.ifBlank { "综合" },
@@ -322,8 +323,13 @@ class LiuYaoViewModel(application: Application) : AndroidViewModel(application) 
                         gender = state.gender,
                     )
                 )
-            }.getOrNull()
-            state = state.copy(interpretation = result, interpreting = false)
+            }
+            val result = outcome.getOrNull()
+            state = state.copy(
+                interpretation = result,
+                interpretationError = outcome.exceptionOrNull()?.message,
+                interpreting = false,
+            )
             saveRecord(chart, result)
         }
     }

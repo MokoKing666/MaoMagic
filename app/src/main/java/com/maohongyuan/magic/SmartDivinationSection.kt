@@ -19,6 +19,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maohongyuan.magic.core.interpret.InferencePrefs
 import com.maohongyuan.magic.core.ai.DownloadState
 import com.maohongyuan.magic.core.ai.DeviceProfile
 import com.maohongyuan.magic.core.ai.LocalModel
@@ -47,7 +48,10 @@ internal fun SmartDivinationSection() {
     val scope = rememberCoroutineScope()
 
     val device = remember { DeviceProfile.current() }
-    val model = remember { LocalModel.candidatesFor(device).first() }
+    // 跟随设置里的「模型变体」——否则选通用版后这里还显示 GPU 版的信息
+    val model = remember(device, InferencePrefs.modelVariant) {
+        LocalModel.candidatesFor(device, InferencePrefs.modelVariant).first()
+    }
     // 分片数可调：不同网络下最优值不同。
     // 4 是默认；CDN 单连接限速时加到 8 有用，弱网下减到 2 更稳。
     var segments by remember { mutableStateOf(4) }
@@ -56,7 +60,7 @@ internal fun SmartDivinationSection() {
     // 删除后要让 installed 失效 —— 用这个计数触发重组。
     // 必须声明在 installed 之前，否则作用域不对。
     var generation by remember { mutableStateOf(0) }
-    val installed = remember(generation, segments) { downloader.installed(dir, model) }
+    val installed = remember(generation, segments) { downloader.installed(context, model) }
 
     var state by remember { mutableStateOf<String>("") }
     var progress by remember { mutableStateOf<Float?>(null) }

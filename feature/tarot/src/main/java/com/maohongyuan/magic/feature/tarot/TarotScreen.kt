@@ -65,15 +65,19 @@ fun TarotScreen(scrollState: ScrollState) {
     var question by remember { mutableStateOf("") }
     var chart by remember { mutableStateOf<TarotChart?>(null) }
     var interpretation by remember { mutableStateOf<Interpretation?>(null) }
+    var interpretationError by remember { mutableStateOf<String?>(null) }
 
     fun draw() {
         val c = TarotDivination.draw(spread, question)
         chart = c
         interpretation = null
+        interpretationError = null
         scope.launch {
-            interpretation = chain.interpret(
-                InterpretationRequest(question = question, chart = c)
-            )
+            val outcome = runCatching {
+                chain.interpret(InterpretationRequest(question = question, chart = c))
+            }
+            interpretation = outcome.getOrNull()
+            interpretationError = outcome.exceptionOrNull()?.message
         }
     }
 
@@ -174,6 +178,9 @@ fun TarotScreen(scrollState: ScrollState) {
                     )
                 }
             }
+        }
+        interpretationError?.let { message ->
+            MagicCaption("所选解卦模式调用失败：$message")
         }
 
         Text(

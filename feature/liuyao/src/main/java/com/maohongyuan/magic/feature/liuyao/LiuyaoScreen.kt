@@ -208,6 +208,14 @@ fun LiuyaoScreen(scrollState: ScrollState) {
         }
 
         state.interpretation?.let { InterpretationCard(it) }
+        state.interpretationError?.let { message ->
+            Text(
+                text = "所选解卦模式调用失败：$message",
+                fontSize = MagicType.footnote.sp,
+                color = colors.warning,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = MagicSpacing.cardPadding),
+            )
+        }
 
         if (state.history.isNotEmpty()) {
             HistoryCard(

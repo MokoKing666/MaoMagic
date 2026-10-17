@@ -96,7 +96,14 @@ class OnDeviceParseTest {
     fun `空输出不产出结果`() {
         assertNull(run(""))
         assertNull(run("   \n  "))
-        assertNull(run(null))
+    }
+
+    @Test
+    fun `后端返回 null 时抛错而不是静默降级`() {
+        // 后端拿不到结果 = 模型没起来。必须让上层知道，
+        // 否则用户选了「本地模型」，界面却悄悄显示「基础模式」。
+        val failure = runCatching { run(null) }.exceptionOrNull()
+        assertTrue("应抛出可读错误", failure is IllegalStateException)
     }
 
     @Test

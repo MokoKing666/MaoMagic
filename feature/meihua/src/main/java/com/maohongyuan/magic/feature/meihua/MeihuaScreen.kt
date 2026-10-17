@@ -91,6 +91,7 @@ fun MeihuaScreen(scrollState: ScrollState) {
     var question by remember { mutableStateOf("") }
     var chart by remember { mutableStateOf<MeihuaChart?>(null) }
     var interpretation by remember { mutableStateOf<Interpretation?>(null) }
+    var interpretationError by remember { mutableStateOf<String?>(null) }
     var monthBranch by remember { mutableStateOf<EarthlyBranch?>(null) }
 
     val scope = rememberCoroutineScope()
@@ -126,16 +127,19 @@ fun MeihuaScreen(scrollState: ScrollState) {
         val day = CalendarService.today()
         monthBranch = day.monthBranch
         interpretation = null
+        interpretationError = null
         scope.launch {
-            // InterpreterChain.interpret 直接返回结果（内部已做降级与 firstOrNull），
-            // 不再是 Flow —— 这里不能再接 .firstOrNull()
-            interpretation = chain.interpret(
-                InterpretationRequest(
-                    question = question.ifBlank { "综合" },
-                    chart = chartValue,
-                    monthBranch = day.monthBranch,
+            val outcome = runCatching {
+                chain.interpret(
+                    InterpretationRequest(
+                        question = question.ifBlank { "综合" },
+                        chart = chartValue,
+                        monthBranch = day.monthBranch,
+                    )
                 )
-            )
+            }
+            interpretation = outcome.getOrNull()
+            interpretationError = outcome.exceptionOrNull()?.message
         }
     }
 
@@ -352,6 +356,9 @@ fun MeihuaScreen(scrollState: ScrollState) {
 
         // ── 解卦 ──
         interpretation?.let { InterpretationCard(it) }
+        interpretationError?.let { message ->
+            MagicCaption("所选解卦模式调用失败：$message")
+        }
 
         Text(
             text = "术数内容仅供传统文化研究与娱乐，不构成任何决策建议。",

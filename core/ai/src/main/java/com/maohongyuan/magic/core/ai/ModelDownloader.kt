@@ -199,9 +199,26 @@ class ModelDownloader(
         runCatching { file.writeText(done.joinToString(",")) }
     }
 
-    /** 已下载的模型 */
+    /** 已下载的模型（指定目录） */
     fun installed(dir: File, model: LocalModel): File? =
         File(dir, model.fileName).takeIf { it.exists() && it.length() == model.sizeBytes }
+
+    /**
+     * 查找已下载模型：先查 Android/data 新目录，再查旧版 filesDir 私有目录。
+     *
+     * 这样升级目录策略时不会要求用户重新下载 1.9 GB。
+     */
+    fun resolveModelFile(context: Context, model: LocalModel): File? {
+        val external = File(modelDir(context), model.fileName)
+        if (external.isFile && external.length() == model.sizeBytes) return external
+
+        val legacy = File(context.filesDir, "models/${model.fileName}")
+        if (legacy.isFile && legacy.length() == model.sizeBytes) return legacy
+        return null
+    }
+
+    fun installed(context: Context, model: LocalModel): File? =
+        resolveModelFile(context, model)
 
     companion object {
         /**

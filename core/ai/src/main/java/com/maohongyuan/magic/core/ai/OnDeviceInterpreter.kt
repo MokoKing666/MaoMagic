@@ -1,7 +1,7 @@
 package com.maohongyuan.magic.core.ai
 
 import android.content.Context
-import android.util.Log
+import com.maohongyuan.magic.core.interpret.InferencePrefs
 import com.maohongyuan.magic.core.interpret.DivinationInterpreter
 import com.maohongyuan.magic.core.interpret.EngineTier
 import com.maohongyuan.magic.core.interpret.Interpretation
@@ -57,7 +57,7 @@ class OnDeviceInterpreter(
         val raw = b.generate(
             systemPrompt = ChartPrompt.SYSTEM_PROMPT,
             userMessage = ChartPrompt.userMessage(request),
-        ) ?: return@flow
+        ) ?: throw IllegalStateException(b.errorMessage ?: "端上模型没有返回结果")
 
         val text = raw.trim()
         if (text.isEmpty()) return@flow
@@ -74,7 +74,7 @@ class OnDeviceInterpreter(
         // 2. 看起来像 JSON 却解析不了 —— 说明模型输出残缺。
         //    此时把花括号内容当正文渲染只会更糟，直接降级。
         if (text.startsWith("{") || text.contains("\"sections\"")) {
-            Log.w("MaoMagicLLM", "模型输出像 JSON 但解析失败，降级到规则引擎")
+            LlmLog.w("模型输出像 JSON 但解析失败，降级到规则引擎")
             return@flow
         }
 
@@ -145,13 +145,22 @@ class OnDeviceInterpreter(
          * 降级链会自动跳过它 —— 不需要调用方判断。
          */
         fun fromDevice(context: Context): OnDeviceInterpreter {
+            LlmLog.init(context)
             val device = DeviceProfile.current()
-            val model = LocalModel.candidatesFor(device).first()
+            val model = LocalModel.candidatesFor(device, InferencePrefs.modelVariant).first()
             val dir = ModelDownloader.modelDir(context)
-            val file = File(dir, model.fileName)
-            val exists = file.exists()
-            Log.i(
-                "MaoMagicLLM",
+            val file = ModelDownloader().resolveModelFile(context, model)
+                ?: File(dir, model.fileName)
+            val exists = file.isFile && file.length() == model.sizeBytes
+            // OpenCL 探测：设备上有 /vendor/lib64/libOpenCL.so 且在 public.libraries 白名单，
+            // 但 LiteRT-LM 仍报找不到。测一下应用命名空间能否加载，区分「设备没有」与「加载器找不到」。
+            val clByLib = runCatching { System.loadLibrary("OpenCL"); "成功" }
+                .getOrElse { "失败(${it.javaClass.simpleName})" }
+            val clByPath = runCatching { System.load("/vendor/lib64/libOpenCL.so"); "成功" }
+                .getOrElse { "失败(${it.javaClass.simpleName})" }
+            LlmLog.i("OpenCL 探测 → loadLibrary=$clByLib 绝对路径=$clByPath")
+
+            LlmLog.i(
                 "fromDevice: soc=${device.socModel}/${device.socManufacturer} " +
                     "pick=${model.label} path=${file.absolutePath} exists=$exists " +
                     "len=${if (exists) file.length() else -1}",
@@ -172,6 +181,9 @@ class OnDeviceInterpreter(
  * 也方便在测试里塞一个假后端验证链路。
  */
 interface LocalModelBackend {
+
+    /** 最近一次失败原因。供明确选择本地模型时展示；自动模式仍允许降级。 */
+    val errorMessage: String? get() = null
 
     /** 运行时是否已就绪（模型已加载） */
     suspend fun isReady(): Boolean

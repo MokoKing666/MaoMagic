@@ -106,10 +106,13 @@ fun XiaoLiuRenScreen(scrollState: ScrollState) {
         }
         chart = result
         interpretation = null
+        error = null
         scope.launch {
-            interpretation = chain.interpret(
-                InterpretationRequest(question = question, chart = result)
-            )
+            val outcome = runCatching {
+                chain.interpret(InterpretationRequest(question = question, chart = result))
+            }
+            interpretation = outcome.getOrNull()
+            error = outcome.exceptionOrNull()?.message
         }
     }
 

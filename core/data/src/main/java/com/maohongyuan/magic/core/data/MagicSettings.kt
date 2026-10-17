@@ -77,6 +77,14 @@ data class MagicSettings(
      */
     val inferenceBackend: String = "AUTO",
 
+    /**
+     * 模型变体：AUTO / GPU / GENERIC / QUALCOMM_SM8750。
+     *
+     * 必须可手动选 —— 自动推荐只看 SoC，看不出「这台机器有没有 OpenCL」。
+     * GPU 版只含 GPU 编译图，无 OpenCL 的设备（实测 vivo/天玑）必须用通用版。
+     */
+    val modelVariant: String = "AUTO",
+
     /** 起卦后自动保存到历史 */
     val autoSaveHistory: Boolean = true,
 

@@ -46,7 +46,12 @@ object InferencePrefs {
     @Volatile
     var backend: BackendPref = BackendPref.AUTO
 
-    fun update(tierName: String?, backendName: String?) {
+    /** 模型变体偏好：AUTO / GPU / GENERIC / QUALCOMM_SM8750 */
+    @Volatile
+    var modelVariant: String = "AUTO"
+
+    fun update(tierName: String?, backendName: String?, variant: String? = null) {
+        if (variant != null) modelVariant = variant
         preferredTier = when (tierName) {
             "ON_DEVICE" -> EngineTier.ON_DEVICE
             "CLOUD_AI" -> EngineTier.CLOUD_AI
