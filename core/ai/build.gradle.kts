@@ -41,7 +41,7 @@ dependencies {
     testImplementation(libs.junit)
     // 端上推理（Tier3）。坐标在 **Google Maven**，不在 Maven Central ——
     // 用 repo1 探测会 404，settings.gradle.kts 里的 google() 才有。
-    implementation(libs.mediapipe.tasks.genai)
+
     // LiteRT-LM：支持 .litertlm 容器，有 MediaTek/Qualcomm NPU 运行时。
     // 坐标在 **Google Maven**（不在 Maven Central）。
     implementation(libs.litertlm.android)
