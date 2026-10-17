@@ -111,14 +111,21 @@ fun LiquidBottomTabs(
     val isLightTheme = magicColors.isLight
     val accentColor = magicColors.accent
 
-    // 容器色沿用本项目的玻璃令牌，不写死
-    val containerColor = Color.White.copy(
-        alpha = if (isLightTheme) {
-            GlassLevel.Thick.surfaceAlphaLight
-        } else {
-            GlassLevel.Thick.surfaceAlphaDark
-        }
-    )
+    // 容器色照抄 Kyant0 LiquidBottomTabs：
+    //   亮色 Color(0xFFFAFAFA).copy(0.4f)   近白
+    //   深色 Color(0xFF121212).copy(0.4f)   近黑
+    //
+    // ⚠️ 原来这里写的是 Color.White.copy(alpha) —— **两种主题都是白**。
+    // 深色下底栏被提亮成灰雾，和 MagicGlassSurface 是同一个错误，当时漏改了。
+    // 深色玻璃该往更深走，不是往更白走。
+    val containerColor = (if (isLightTheme) Color(0xFFFAFAFA) else Color(0xFF121212))
+        .copy(
+            alpha = if (isLightTheme) {
+                GlassLevel.Thick.surfaceAlphaLight
+            } else {
+                GlassLevel.Thick.surfaceAlphaDark
+            }
+        )
 
     val tabsBackdrop = rememberLayerBackdrop()
 
