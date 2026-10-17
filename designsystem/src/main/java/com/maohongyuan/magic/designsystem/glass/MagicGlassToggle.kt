@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.lerp
+import com.maohongyuan.magic.designsystem.theme.LocalMagicColors
 import com.kyant.backdrop.backdrops.layerBackdrop
 import com.kyant.backdrop.backdrops.rememberBackdrop
 import com.kyant.backdrop.backdrops.rememberCombinedBackdrop
@@ -71,7 +72,8 @@ fun MagicGlassToggle(
 ) {
     val backdrop = LocalBackdrop.current
     val isLightTheme = !isSystemInDarkTheme()
-    val accentColor = if (isLightTheme) Color(0xFF34C759) else Color(0xFF30D158)
+    // 用主题色，不用 iOS 绿 —— 这是本应用的开关，该跟品牌走。
+    val accentColor = LocalMagicColors.current.accent
     val trackColor =
         if (isLightTheme) Color(0xFF787878).copy(0.2f) else Color(0xFF787880).copy(0.36f)
 

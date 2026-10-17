@@ -257,45 +257,8 @@ fun SettingsScreen(
             MagicCaption("「跟随系统」会随手机的深色模式自动切换。")
             Spacer(Modifier.height(MagicSpacing.cardPadding))
 
-            MagicLabel("玻璃质感")
-            Spacer(Modifier.height(MagicSpacing.row))
-            MagicSegmentedControl(
-                options = GlassQuality.entries.map { it.label },
-                selectedIndex = GlassQuality.entries.indexOf(settings.glassQuality),
-                onSelect = { onChange(settings.copy(glassQuality = GlassQuality.entries[it])) },
-            )
-            Spacer(Modifier.height(MagicSpacing.xs))
-            MagicCaption(settings.glassQuality.description)
-
-            if (settings.glassQuality != GlassQuality.OFF) {
-                Spacer(Modifier.height(MagicSpacing.cardPadding))
-                MagicGlassSliderRow(
-                    label = "折射强度",
-                    valueText = "%.2f×".format(settings.refractionScale),
-                    value = settings.refractionScale,
-                    onValueChange = { onChange(settings.copy(refractionScale = it)) },
-                    valueRange = MagicSettings.REFRACTION_RANGE,
-                    caption = "1.00× 为设计标定值。调高更「液体」，但过高会让色散把周围明暗差读成色差。",
-                )
-
-                Spacer(Modifier.height(MagicSpacing.cardPadding))
-                MagicGlassSliderRow(
-                    label = "表面通透度",
-                    valueText = "%.2f×".format(settings.surfaceAlphaScale),
-                    value = settings.surfaceAlphaScale,
-                    onValueChange = { onChange(settings.copy(surfaceAlphaScale = it)) },
-                    valueRange = MagicSettings.SURFACE_ALPHA_RANGE,
-                    caption = "调低更通透。表面不透明度是正文可读性的底线，低于 0.85× 时文字对比度会明显下降。",
-                )
-                if (settings.surfaceAlphaScale < 0.85f) {
-                    Spacer(Modifier.height(MagicSpacing.xs))
-                    Text(
-                        text = "${MagicSemanticMark.WARNING.glyph} 当前通透度较低，正文可读性可能不足",
-                        fontSize = MagicType.caption.sp,
-                        color = colors.warning,
-                    )
-                }
-            }
+            // 玻璃质感不再提供调节 —— 参数全部照抄 Kyant0，
+            // 让他调反而会调坏（自己调出来的就是「磨砂不像玻璃」那版）。
         }
 
         // ── 配色 ──
@@ -371,7 +334,7 @@ fun SettingsScreen(
                 },
             )
             Spacer(Modifier.height(MagicSpacing.xs))
-            MagicCaption("只重置外观、配色与玻璃参数。云端配置、引擎档位与卦例都不动。")
+            MagicCaption("只重置外观与配色。云端配置、引擎档位与卦例都不动。")
         }
 
         // ── 关于 ──
