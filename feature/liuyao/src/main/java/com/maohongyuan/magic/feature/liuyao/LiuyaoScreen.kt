@@ -16,6 +16,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -101,7 +106,11 @@ fun LiuyaoScreen(scrollState: ScrollState) {
             Spacer(Modifier.height(MagicSpacing.cardPadding))
 
             when (state.method) {
-                DivinationMethod.COIN -> CoinPanel(state.throws, vm::throwOneCoin)
+                DivinationMethod.COIN -> {
+                    // 摇一摇：摇满六爻后关闭监听，否则再摇会误触
+                    rememberShakeDetector(enabled = state.throws.size < 6) { vm.throwOneCoin() }
+                    CoinPanel(state.throws, vm::throwOneCoin)
+                }
                 DivinationMethod.TIME -> TimePanel(state, vm::castByTime)
                 DivinationMethod.NUMBER -> NumberPanel(
                     a = state.numberA,
@@ -253,7 +262,21 @@ private fun castPanel(content: @Composable androidx.compose.foundation.layout.Co
 private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
     val colors = LocalMagicColors.current
     castPanel {
-        Text(text = "☯", fontSize = MagicType.display.sp, color = colors.accent)
+        // 每次摇出一爻，太极图翻一圈 —— 给「摇」这个动作一个视觉落点。
+        // 用 rotationY 而不是旋转，是因为铜钱是翻面不是转圈。
+        val flip = remember { Animatable(0f) }
+        LaunchedEffect(throws.size) {
+            if (throws.isNotEmpty()) {
+                flip.snapTo(0f)
+                flip.animateTo(360f, tween(durationMillis = 480, easing = FastOutSlowInEasing))
+            }
+        }
+        Text(
+            text = "☯",
+            fontSize = MagicType.display.sp,
+            color = colors.accent,
+            modifier = Modifier.graphicsLayer { rotationY = flip.value },
+        )
         Spacer(Modifier.height(MagicSpacing.row))
         Text("三枚铜钱，摇六次成卦", fontSize = MagicType.subheadline.sp, color = colors.secondaryText)
         Spacer(Modifier.height(MagicSpacing.xs))
