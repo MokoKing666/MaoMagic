@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maohongyuan.magic.core.ai.InterpreterChains
 import com.maohongyuan.magic.core.interpret.Interpretation
 import com.maohongyuan.magic.core.interpret.InterpretationRequest
 import com.maohongyuan.magic.core.interpret.Tone
@@ -55,6 +57,9 @@ import kotlinx.coroutines.launch
 fun TarotScreen(scrollState: ScrollState) {
     val colors = LocalMagicColors.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // 必须 remember —— 否则每次解卦都重建后端、重新加载 2 GB 模型
+    val chain = remember { InterpreterChains.standard(context, TarotRuleEngine()) }
 
     var spread by remember { mutableStateOf(TarotSpread.THREE) }
     var question by remember { mutableStateOf("") }
@@ -66,11 +71,12 @@ fun TarotScreen(scrollState: ScrollState) {
         chart = c
         interpretation = null
         scope.launch {
-            interpretation = TarotRuleEngine()
-                .interpret(InterpretationRequest(question = question, chart = c))
-                .firstOrNull()
+            interpretation = chain.interpret(
+                InterpretationRequest(question = question, chart = c)
+            )
         }
     }
+
 
     MagicPageContent(scrollState = scrollState) {
         MagicPageHeader(title = "塔罗", subtitle = "韦特体系 · 78 张")

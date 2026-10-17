@@ -39,4 +39,5 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.compose)
 
     debugImplementation(libs.compose.ui.tooling)
+    implementation(project(":core:ai"))
 }

@@ -46,7 +46,8 @@ class OnDeviceInterpreter(
             userMessage = ChartPrompt.userMessage(request),
         ) ?: return@flow
 
-        val text = raw.trim()
+        // 小模型爱输出 Markdown，界面上不解析 —— 这里压成纯文本
+        val text = PlainText.sanitize(raw)
         if (text.isEmpty()) return@flow
 
         // 判词、吉凶、用神说明一律取算法结果 —— 模型不参与判断

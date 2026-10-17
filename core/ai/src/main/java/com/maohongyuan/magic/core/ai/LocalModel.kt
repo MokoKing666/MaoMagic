@@ -62,17 +62,21 @@ enum class LocalModel(
     ),
 
     /**
-     * 主推变体：MediaPipe 的 .task 包。
+     * 主推变体：LiteRT-LM 的 `.litertlm` 容器。
      *
-     * ⚠️ **不能用 .litertlm** —— 两者文件头不同：
-     * 
-     * MediaPipe tasks-genai 只认 TFL3。喂 LITERTLM 会得到
-     *  ——
-     * GPU 和 CPU 报同一个错，很容易误判成 GPU 问题。
+     * ⚠️ **格式不能混用**，两者文件头不同：
+     * ```
+     * .litertlm  → magic "LITERTLM"   由 LiteRT-LM 运行时读
+     * .task      → magic "TFL3"       由 MediaPipe tasks-genai 读
+     * ```
+     * 喂错运行时，两边都只报「model is null」这类不含格式信息的错，极难定位。
+     *
+     * 本项目用 **LiteRT-LM**（`com.google.ai.edge.litertlm:litertlm-android`）：
+     * 它支持 NPU 后端，MediaPipe 没有。
      */
     GPU(
-        fileName = "gemma-4-E2B-it-web.task",
-        sizeBytes = 2_003_697_664L,   // 实测 Content-Length
+        fileName = "gemma-4-E2B-it-gpu.litertlm",
+        sizeBytes = 2_008_432_640L,   // 实测 Content-Length
         label = "GPU 加速",
         note = "通用 GPU 加速，绝大多数手机可用。",
     ),

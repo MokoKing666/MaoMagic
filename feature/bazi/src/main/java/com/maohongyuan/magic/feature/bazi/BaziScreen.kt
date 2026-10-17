@@ -20,8 +20,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import com.maohongyuan.magic.core.ai.InterpreterChains
 import com.maohongyuan.magic.core.calendar.LiuNianService
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -77,6 +79,9 @@ fun BaziScreen(scrollState: ScrollState) {
     val shapes = LocalMagicShapes.current
     val wuXing = LocalMagicWuXing.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // 必须 remember —— 否则每次解卦都重建后端、重新加载 2 GB 模型
+    val chain = remember { InterpreterChains.standard(context, BaZiRuleEngine()) }
 
     // 输入口径。默认公历 —— 大多数人不记得自己的农历生日。
     var useLunar by remember { mutableStateOf(false) }
@@ -129,12 +134,13 @@ fun BaziScreen(scrollState: ScrollState) {
         interpretation = null
         if (c != null) {
             scope.launch {
-                interpretation = BaZiRuleEngine().interpret(
+                interpretation = chain.interpret(
                     InterpretationRequest("看命盘", chart = c)
-                ).firstOrNull()
+                )
             }
         }
     }
+
 
     MagicPageContent(scrollState = scrollState) {
         MagicPageHeader(title = "八字命盘", subtitle = "四柱 · 十神 · 大运流年")

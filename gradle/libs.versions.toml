@@ -12,6 +12,7 @@ serializationJson = "1.11.0"
 lunar = "1.7.7"
 tyme4kt = "1.5.0"
 mediapipeTasksGenai = "0.10.35"
+litertlmAndroid = "0.18.0"
 backdrop = "2.0.1"
 shapes = "1.2.1"
 okhttp = "4.12.0"
@@ -42,6 +43,7 @@ kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serializa
 lunar = { module = "cn.6tail:lunar", version.ref = "lunar" }
 tyme4kt = { module = "cn.6tail:tyme4kt", version.ref = "tyme4kt" }
 mediapipe-tasks-genai = { module = "com.google.mediapipe:tasks-genai", version.ref = "mediapipeTasksGenai" }
+litertlm-android = { module = "com.google.ai.edge.litertlm:litertlm-android", version.ref = "litertlmAndroid" }
 # iOS 流体玻璃效果引擎（Apache-2.0）
 backdrop = { module = "io.github.kyant0:backdrop", version.ref = "backdrop" }
 # 连续曲率形状库（Apache-2.0）。Capsule 是官方 dock 实现的必需依赖。

@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maohongyuan.magic.core.ai.InterpreterChains
 import com.maohongyuan.magic.core.calendar.CalendarService
 import com.maohongyuan.magic.core.hexagram.MeihuaChart
 import com.maohongyuan.magic.core.hexagram.MeihuaDivination
@@ -115,13 +116,10 @@ fun MeihuaScreen(scrollState: ScrollState) {
     }
     // rememberUpdatedState 让 lambda 拿到**最新**配置，同时保持实例稳定
     val configRef = rememberUpdatedState(cloudConfig)
+    // 统一走工厂：端上模型 → 云端 → 规则。
+    // 必须 remember —— 否则每次解卦都会重建后端、重新加载 2 GB 模型。
     val chain = remember {
-        InterpreterChain(
-            listOf(
-                CloudAiInterpreter { configRef.value },
-                MeihuaRuleEngine(),
-            )
-        )
+        InterpreterChains.standard(context, MeihuaRuleEngine()) { configRef.value }
     }
 
     fun interpret(chartValue: MeihuaChart) {

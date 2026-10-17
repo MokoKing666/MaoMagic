@@ -14,6 +14,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -21,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maohongyuan.magic.core.ai.InterpreterChains
 import com.maohongyuan.magic.core.calendar.CalendarService
 import com.maohongyuan.magic.core.interpret.Interpretation
 import com.maohongyuan.magic.core.interpret.InterpretationRequest
@@ -62,6 +64,9 @@ import kotlinx.coroutines.launch
 fun XiaoLiuRenScreen(scrollState: ScrollState) {
     val colors = LocalMagicColors.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    // 必须 remember —— 否则每次解卦都重建后端、重新加载 2 GB 模型
+    val chain = remember { InterpreterChains.standard(context, XiaoLiuRenRuleEngine()) }
 
     val today = remember { CalendarService.today() }
     val todayBranch: EarthlyBranch = remember(today) {
@@ -102,11 +107,12 @@ fun XiaoLiuRenScreen(scrollState: ScrollState) {
         chart = result
         interpretation = null
         scope.launch {
-            interpretation = XiaoLiuRenRuleEngine()
-                .interpret(InterpretationRequest(question = question, chart = result))
-                .firstOrNull()
+            interpretation = chain.interpret(
+                InterpretationRequest(question = question, chart = result)
+            )
         }
     }
+
 
     MagicPageContent(scrollState = scrollState) {
         MagicPageHeader(title = "小六壬", subtitle = "六宫速断 · 月日时三级落宫")
