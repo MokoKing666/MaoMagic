@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.drawscope.Stroke
 import kotlin.math.cos
 import kotlin.math.abs
 import androidx.compose.ui.draw.clip
@@ -278,15 +279,58 @@ private fun CoinFace(angle: Float, isZi: Boolean, thrown: Boolean, tint: Color, 
     val frontSide = (angle / 180f).toInt() % 2 == 0
     val showingZi = if (frontSide) isZi else !isZi
 
-    // 用 🪙 而不是自己画圆：手绘的圆形加边框太像按钮，不像铜钱。
-    // 翻转只作用在 emoji 上（scaleX 压扁），字/背标签放在下面不参与翻转 ——
-    // 标签一起翻的话，转过去就是镜像字，反而看不清。
+    // 方孔铜钱，Canvas 画。
+    //
+    // 为什么不用 🪙：emoji 正反一模一样，只有底下小字不同 —— 分不出正反。
+    // 真实铜钱的区别方式就是「字面有纹、背面光素」，这里照这个来：
+    // 字面在方孔四周画四道短纹（四字位），背面留白。
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(
-            text = "🪙",
-            fontSize = 34.sp,
-            modifier = Modifier.graphicsLayer { scaleX = squash },
-        )
+        val coinColor = if (thrown) tint else colors.tertiaryText
+        Canvas(
+            modifier = Modifier
+                .size(40.dp)
+                .graphicsLayer { scaleX = squash },
+        ) {
+            val r = size.minDimension / 2f
+            val c = Offset(size.width / 2f, size.height / 2f)
+            val ring = r * 0.16f
+
+            // 外圆：淡金填充 + 金色描边
+            drawCircle(color = coinColor.copy(alpha = 0.16f), radius = r - ring / 2f, center = c)
+            drawCircle(
+                color = coinColor,
+                radius = r - ring / 2f,
+                center = c,
+                style = Stroke(width = ring),
+            )
+            // 方孔
+            val hole = r * 0.34f
+            drawRect(
+                color = coinColor,
+                topLeft = Offset(c.x - hole, c.y - hole),
+                size = Size(hole * 2, hole * 2),
+                style = Stroke(width = ring * 0.9f),
+            )
+            // 字面：方孔四周四道短纹（模拟「某某通宝」四字）
+            if (thrown && showingZi) {
+                val barLen = r * 0.30f
+                val barW = r * 0.13f
+                val gap = hole + ring * 1.5f
+                listOf(
+                    Offset(c.x - barW / 2, c.y - gap - barLen),
+                    Offset(c.x - barW / 2, c.y + gap),
+                    Offset(c.x - gap - barLen, c.y - barW / 2),
+                    Offset(c.x + gap, c.y - barW / 2),
+                ).forEachIndexed { i, topLeft ->
+                    val vertical = i < 2
+                    drawRect(
+                        color = coinColor,
+                        topLeft = topLeft,
+                        size = if (vertical) Size(barW, barLen) else Size(barLen, barW),
+                    )
+                }
+            }
+        }
         Text(
             text = when {
                 !thrown -> "?"
@@ -393,7 +437,7 @@ private fun CoinPanel(throws: List<CoinThrow>, onCast: () -> Unit) {
                 text = when {
                     throws.size >= 6 -> "六爻已齐"
                     throws.isEmpty() -> "摇初爻"
-                    else -> "摇${YaoPosition.of(throws.size).ordinalLabel}"
+                    else -> "摇${YaoPosition.of(throws.size).ordinalLabel}爻"
                 },
                 fontSize = MagicType.body.sp,
                 fontWeight = FontWeight.SemiBold,
