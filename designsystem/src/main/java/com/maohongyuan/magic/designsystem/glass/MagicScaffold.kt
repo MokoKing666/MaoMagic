@@ -70,6 +70,14 @@ object MagicScaffoldDefaults {
 
 
 /**
+ * 当前页面是否显示左上角返回钮。
+ *
+ * [MagicPageContent] 读它来决定顶部内边距 —— 返回钮是**浮层**，不占布局，
+ * 若不额外让位，页面大标题会被它压住（实测「黄历」两个字被切掉一半）。
+ */
+val LocalBackButtonVisible = staticCompositionLocalOf { false }
+
+/**
  * 应用外壳。
  *
  * 负责建立流体玻璃的三层结构，并统一处理：
@@ -121,7 +129,12 @@ fun MagicScaffold(
     MagicBackdrop(
         modifier = modifier,
         glassMode = glassMode,
-        content = { content(scrollState) },
+        content = {
+            // 返回钮是浮层、不占布局；用 CompositionLocal 告诉页面让出顶部空间
+            CompositionLocalProvider(LocalBackButtonVisible provides (onBack != null)) {
+                content(scrollState)
+            }
+        },
         overlay = {
             // ── 顶部滚动边缘效果 ──
             // iOS 26 的滚动边缘效果本质是**渐进模糊**（贴边最糊、向内递减），
@@ -266,6 +279,13 @@ fun MagicPageContent(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val density = LocalDensity.current
+
+    // 有返回钮时让出它的高度，否则页面大标题会被浮层压住
+    val effectiveTopPadding = if (LocalBackButtonVisible.current) {
+        topPadding + MagicScaffoldDefaults.IconButtonSize + MagicSpacing.xs
+    } else {
+        topPadding
+    }
     val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val imeVisible = WindowInsets.ime.getBottom(density) > 0
 
@@ -284,7 +304,7 @@ fun MagicPageContent(
             .imePadding()
             .verticalScroll(scrollState)
             .padding(horizontal = horizontalPadding)
-            .padding(top = topPadding, bottom = effectiveBottom),
+            .padding(top = effectiveTopPadding, bottom = effectiveBottom),
         verticalArrangement = verticalArrangement,
     ) {
         content()

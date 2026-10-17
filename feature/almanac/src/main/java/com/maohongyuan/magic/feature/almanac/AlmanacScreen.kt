@@ -14,6 +14,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.maohongyuan.magic.designsystem.glass.DateGranularity
+import com.maohongyuan.magic.designsystem.glass.GlassCard
+import com.maohongyuan.magic.designsystem.glass.GlassLevel
+import com.maohongyuan.magic.designsystem.glass.MagicDateBar
+import com.maohongyuan.magic.designsystem.glass.MagicListRow
+import java.time.LocalDate
+import java.time.LocalTime
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -24,8 +34,6 @@ import androidx.compose.ui.unit.sp
 import com.maohongyuan.magic.core.calendar.CalendarService
 import com.maohongyuan.magic.core.calendar.DayInfo
 import com.maohongyuan.magic.core.calendar.HourInfo
-import com.maohongyuan.magic.designsystem.glass.GlassCard
-import com.maohongyuan.magic.designsystem.glass.GlassLevel
 import com.maohongyuan.magic.designsystem.glass.MagicBadge
 import com.maohongyuan.magic.designsystem.glass.MagicCaption
 import com.maohongyuan.magic.designsystem.glass.MagicDivider
@@ -45,17 +53,34 @@ import com.maohongyuan.magic.designsystem.theme.MagicType
  * 数据来自 [CalendarService]（历法内核，离线计算，无网络依赖）。
  */
 @Composable
-fun AlmanacScreen(scrollState: ScrollState) {
+fun AlmanacScreen(
+    scrollState: ScrollState,
+    onOpenDailyFortune: (() -> Unit)? = null,
+) {
     val colors = LocalMagicColors.current
-    val day: DayInfo = remember { CalendarService.today() }
+
+    // 黄历不再只看今天 —— 任意日期都能查。
+    // 时柱取「当前时刻的 hour」：日子本身没有时柱这个概念，换成任何固定值都是武断的；
+    // 保持随当前时刻最不误导，页面上另有 caption 指向下方的「时辰吉凶」。
+    var date by remember { mutableStateOf(LocalDate.now()) }
+    val day: DayInfo = remember(date) {
+        CalendarService.of(date.year, date.monthValue, date.dayOfMonth, LocalTime.now().hour)
+    }
     val hours: List<HourInfo> = remember(day) {
         CalendarService.hoursOf(day.solar.year, day.solar.month, day.solar.day)
     }
 
     MagicPageContent(scrollState = scrollState) {
         MagicPageHeader(
-            title = "今日黄历",
+            title = "黄历",
             subtitle = "${day.solar.ymd} · 农历${day.lunar.monthLabel}${day.lunar.dayLabel}",
+        )
+
+        // 日期条：前后翻 + 点开输入任意日期
+        MagicDateBar(
+            date = date,
+            onDateChange = { date = it },
+            granularity = DateGranularity.DAY,
         )
 
         // ── 日课概要 ──
@@ -105,7 +130,7 @@ fun AlmanacScreen(scrollState: ScrollState) {
                 MagicInfoRow("年柱", "${day.ganZhi.year} · ${day.ganZhi.yearNaYin}")
                 MagicInfoRow("月柱", "${day.ganZhi.month} · ${day.ganZhi.monthNaYin}")
                 MagicInfoRow("日柱", "${day.ganZhi.day} · ${day.ganZhi.dayNaYin}")
-                MagicInfoRow("时柱", "${day.ganZhi.hour} · ${day.ganZhi.timeNaYin}")
+                MagicInfoRow("时柱", "${day.ganZhi.hour} · ${day.ganZhi.timeNaYin} · 随当前时辰")
                 MagicInfoRow("建除", "${day.almanac.zhiXing}日")
                 MagicInfoRow("黄道", "${day.almanac.tianShen}（${day.almanac.tianShenType}）")
                 MagicInfoRow("星宿", "${day.almanac.xiu}宿 · ${day.almanac.xiuLuck}")
@@ -228,6 +253,19 @@ fun AlmanacScreen(scrollState: ScrollState) {
                     }
                 }
             }
+        }
+
+        // ── 动线：去日运 ──
+        //
+        // 黄历回答「这个日子本身宜不宜做某事」，日运回答「这个日子对你意味着什么」。
+        // 两者是两层，不是替代关系 —— 所以这里给一条明确的下一步，而不是把日运塞进来。
+        GlassCard(level = GlassLevel.Thin) {
+            MagicListRow(
+                title = "查看我的今日运势",
+                subtitle = "按你的日主与今日干支推十神",
+                trailing = "›",
+                onClick = onOpenDailyFortune,
+            )
         }
 
         Text(

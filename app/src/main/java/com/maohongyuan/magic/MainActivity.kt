@@ -177,7 +177,16 @@ private fun MagicApp() {
                     } else {
                         // 钻进取顶层：板块页很短，留着上次的滚动位置会让人以为页面是空的
                         LaunchedEffect(openSystem) { scrollState.scrollTo(0) }
-                        FeatureHost(openSystem, scrollState)
+                        FeatureHost(
+                            system = openSystem,
+                            scrollState = scrollState,
+                            // 功能页之间互相跳转：黄历 → 日运 这类动线要用。
+                            // 目标若在别的板块，连 tab 一起切过去。
+                            onNavigateTo = { target ->
+                                tab = AppTab.entries.indexOf(target.board)
+                                openSystems[target.board.ordinal] = target
+                            },
+                        )
                     }
                 }
             }
@@ -193,12 +202,25 @@ private fun MagicApp() {
  * 用一句明确文案兜住而不是崩溃。
  */
 @Composable
-private fun FeatureHost(system: SystemId, scrollState: ScrollState) {
+private fun FeatureHost(
+    system: SystemId,
+    scrollState: ScrollState,
+    onNavigateTo: (SystemId) -> Unit,
+) {
     when (system) {
         SystemId.LIUYAO -> LiuyaoScreen(scrollState)
         SystemId.BAZI -> BaziScreen(scrollState)
         SystemId.MEIHUA -> MeihuaScreen(scrollState)
-        SystemId.ALMANAC -> AlmanacScreen(scrollState)
+        SystemId.ALMANAC -> AlmanacScreen(
+            scrollState = scrollState,
+            // 日运尚未实现时不显示这条动线 —— 宁可没有入口，
+            // 也不给一个点进去是空白页的死按钮。
+            onOpenDailyFortune = if (SystemId.DAILY_FORTUNE.available) {
+                { onNavigateTo(SystemId.DAILY_FORTUNE) }
+            } else {
+                null
+            },
+        )
         else -> Text("「${system.title}」尚未接入页面（开发期错误）")
     }
 }
