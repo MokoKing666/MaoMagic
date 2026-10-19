@@ -149,10 +149,36 @@ fun MagicGlassSurface(
     val surfaceColor = (if (colors.isLight) Color(0xFFFAFAFA) else Color(0xFF121212))
         .copy(alpha = surfaceAlpha)
 
+    // ⚠️ 必须在**调用方传进来的 modifier 之上**叠加，不能替换它。
+    // modifier 里带着 .size() / .clip() 这些尺寸与形状约束 ——
+    // 替换掉的话元素会失去约束、撑满父容器（实测：返回键铺满整屏挡住画面）。
+    //
+    // ⚠️ 必须放在 OFF 分支**之前**。
+    // 早期版本把这段写在 OFF 分支后面，于是 `glassMode == OFF` 时 Box 拿到的是
+    // 不带 clickable 的 `modifier` —— 降级档下卡片、返回钮**全部点不动**。
+    val pressModifier = if (press != null) {
+        modifier
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = null,
+                        indication = null,
+                        onClick = onClick,
+                    )
+                } else {
+                    Modifier
+                }
+            )
+            .then(press.gestureModifier)
+            .then(press.highlightModifier)
+    } else {
+        modifier
+    }
+
     // ── OFF：完全放弃 backdrop，改用实色表面，性能最省 ──
     if (mode == GlassMode.OFF) {
         Box(
-            modifier = modifier
+            modifier = pressModifier
                 .clip(shape)
                 .background(
                     // 亮色近不透明白（遮住背景）；深色低透明白（抬升页面底色）
@@ -184,28 +210,6 @@ fun MagicGlassSurface(
             }.coerceAtMost(size.minDimension / 2f)
         }
         else -> null
-    }
-
-    // ⚠️ 必须在**调用方传进来的 modifier 之上**叠加，不能替换它。
-    // modifier 里带着 .size() / .clip() 这些尺寸与形状约束 ——
-    // 替换掉的话元素会失去约束、撑满父容器（实测：返回键铺满整屏挡住画面）。
-    val pressModifier = if (press != null) {
-        modifier
-            .then(
-                if (onClick != null) {
-                    Modifier.clickable(
-                        interactionSource = null,
-                        indication = null,
-                        onClick = onClick,
-                    )
-                } else {
-                    Modifier
-                }
-            )
-            .then(press.gestureModifier)
-            .then(press.highlightModifier)
-    } else {
-        modifier
     }
 
     Box(

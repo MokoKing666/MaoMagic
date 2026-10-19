@@ -16,8 +16,8 @@ android {
         applicationId = "com.maohongyuan.magic"
         minSdk = 33
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.6.0"
+        versionCode = 8
+        versionName = "1.6.1"
 
         // 只保留 arm64-v8a —— 纯原生 ARM64 应用。
         //
