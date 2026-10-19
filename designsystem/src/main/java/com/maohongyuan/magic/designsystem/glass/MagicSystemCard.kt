@@ -44,15 +44,40 @@ fun MagicSystemCard(
     icon: MagicTabIcon,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * 共享元素 ID（用系统枚举名）。
+     *
+     * 非 null 且处在 [LocalMagicTransitionScope] 内时，卡片外壳会成为
+     * 容器变形的**来源边界**，标题会成为**共享元素** —— 点击后卡片连续
+     * 长成目标页面，返回时原路缩回。为 null 时行为与以前完全一致。
+     */
+    sharedId: String? = null,
 ) {
     val colors = LocalMagicColors.current
     val shapes = LocalMagicShapes.current
+    val transition = LocalMagicTransitionScope.current
+
+    // 卡片外壳的共享边界。放在 .clip() **之外**，
+    // 这样边界量到的是卡片本身的矩形，而不是被裁剪后的内容区。
+    val boundsModifier = if (transition != null && sharedId != null) {
+        with(transition) { cardBounds(sharedId) }
+    } else {
+        Modifier
+    }
+
+    // 标题的共享元素：目标页大标题会从这个位置飞出去。
+    val titleModifier = if (transition != null && sharedId != null) {
+        with(transition) { titleBounds(sharedId) }
+    } else {
+        Modifier
+    }
+
     // 按压张力：直接用 LiquidButton 那套 ——
     // 玻璃层 layerBlock 形变 + InteractiveHighlight 跟手高光。
     // 卡片本身是 MagicGlassSurface，有自己的 backdrop，所以能用真·玻璃层形变，
     // 不必退到 contentModifier（那会连内容一起缩放，不是「玻璃被按下」）。
     GlassCard(
-        modifier = modifier.clip(shapes.card),
+        modifier = modifier.then(boundsModifier).clip(shapes.card),
         level = GlassLevel.Regular,
         press = rememberGlassPress(),
         onClick = onClick,
@@ -88,6 +113,7 @@ fun MagicSystemCard(
                     overflow = TextOverflow.Ellipsis,
                     fontWeight = FontWeight.SemiBold,
                     color = colors.primaryText,
+                    modifier = titleModifier,
                 )
                 Text(
                     text = subtitle,

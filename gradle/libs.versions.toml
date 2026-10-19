@@ -28,6 +28,9 @@ androidx-navigation-compose = { module = "androidx.navigation:navigation-compose
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
 
 compose-bom = { module = "androidx.compose:compose-bom", version.ref = "composeBom" }
+# 共享元素动画（SharedTransitionLayout / sharedBounds / sharedElement）。
+# 版本由 BOM 管理，这里只是把它从传递依赖提为显式声明 —— 不升级任何东西。
+compose-animation = { module = "androidx.compose.animation:animation" }
 compose-ui = { module = "androidx.compose.ui:ui" }
 compose-ui-graphics = { module = "androidx.compose.ui:ui-graphics" }
 compose-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }

@@ -188,6 +188,18 @@ Layer 1  背景层    MagicBackdrop —— 渐变 + 色斑 + 底纹，唯一折�
 
 信息密度高的页面（八字四柱表、六爻卦盘）使用 `THIN` 档 + 高 alpha 表层色。正文对比度需 ≥ 4.5:1。
 
+### 转场与玻璃的交界
+
+卡片 → 页面的容器变形转场用 Compose 官方共享元素 API
+（`SharedTransitionLayout` / `sharedBounds`），共享元素在转场期间被搬到
+`SharedTransitionLayout` 的 overlay 里绘制。
+
+**这个 overlay 必须留在 `layerBackdrop` 子树内部** —— 否则玻璃表面拿不到
+`LocalBackdrop`，动画途中玻璃会失效、落位后又突然出现。
+转场只叠加 `drawBackdrop`（读），绝不新增 `layerBackdrop`（写）。
+
+细节见 [CONTAINER-TRANSFORM.md](CONTAINER-TRANSFORM.md)。
+
 ---
 
 ## 六、版本与构建

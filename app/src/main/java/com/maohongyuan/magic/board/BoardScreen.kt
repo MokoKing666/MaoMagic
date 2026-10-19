@@ -12,6 +12,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.sp
+import com.maohongyuan.magic.designsystem.glass.LocalMagicTransitionScope
 import com.maohongyuan.magic.designsystem.glass.MagicBoardGroupTitle
 import com.maohongyuan.magic.designsystem.glass.MagicPageContent
 import com.maohongyuan.magic.designsystem.glass.MagicPageHeader
@@ -80,6 +81,14 @@ private fun SystemGrid(
     onOpen: (SystemId) -> Unit,
     onUnavailable: (SystemId) -> Unit,
 ) {
+    // 转场进行中再点卡片会让两次边界动画互相抢同一个 key，
+    // 表现为「卡片弹回原处」或页面叠影。
+    //
+    // ⚠️ 只在点击回调里读 isTransitionActive，**不要**在组合期读 ——
+    // 它是快照状态，组合期读会订阅它，导致板块页在转场开始/结束时被额外重组一次，
+    // 实测会把共享转场的激活推迟约 200ms。
+    val transition = LocalMagicTransitionScope.current
+
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(MagicSpacing.cardGap),
@@ -98,8 +107,15 @@ private fun SystemGrid(
                             // 用户会以为应用坏了。
                             subtitle = if (sys.available) sys.subtitle else "开发中",
                             icon = sys.icon,
+                            // 已实现的系统才参与容器变形转场：
+                            // 未实现的卡片点下去不跳页，给它加共享边界只会留下
+                            // 一个永远配不上对的 key。
+                            sharedId = if (sys.available) sys.name else null,
                             onClick = {
-                                if (sys.available) onOpen(sys) else onUnavailable(sys)
+                                val busy = transition?.shared?.isTransitionActive == true
+                                if (!busy) {
+                                    if (sys.available) onOpen(sys) else onUnavailable(sys)
+                                }
                             },
                         )
                     }

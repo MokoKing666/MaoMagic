@@ -43,6 +43,9 @@ dependencies {
     api(libs.compose.foundation)
     api(libs.compose.material3)
     api(libs.compose.ui.tooling.preview)
+    // 共享元素转场的公开 API 里出现了 SharedTransitionScope / AnimatedVisibilityScope，
+    // 因此同样用 api 暴露给 feature 与 app 模块。
+    api(libs.compose.animation)
 
     // iOS 流体玻璃效果引擎（Apache-2.0）
     api(libs.backdrop)

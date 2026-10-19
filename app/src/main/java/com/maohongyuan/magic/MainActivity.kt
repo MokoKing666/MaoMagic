@@ -5,15 +5,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.Box
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -25,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.maohongyuan.magic.board.BoardScreen
 import com.maohongyuan.magic.core.interpret.InferencePrefs
@@ -36,8 +38,16 @@ import com.maohongyuan.magic.core.data.SettingsStore
 import com.maohongyuan.magic.designsystem.glass.GlassMode
 import com.maohongyuan.magic.designsystem.glass.GlassTuning
 import com.maohongyuan.magic.designsystem.glass.LiquidTab
+import com.maohongyuan.magic.designsystem.glass.LocalBackButtonVisible
 import com.maohongyuan.magic.designsystem.glass.LocalGlassTuning
+import com.maohongyuan.magic.designsystem.glass.LocalMagicTransitionScope
+import com.maohongyuan.magic.designsystem.glass.LocalPageTitleSharedKey
+import com.maohongyuan.magic.designsystem.glass.MagicContainerTransformSurface
 import com.maohongyuan.magic.designsystem.glass.MagicScaffold
+import com.maohongyuan.magic.designsystem.glass.MagicTransitionScope
+import com.maohongyuan.magic.designsystem.glass.MagicTransitionSpec
+import com.maohongyuan.magic.designsystem.glass.magicTransitionProgress
+import com.maohongyuan.magic.designsystem.glass.pageBounds
 import com.maohongyuan.magic.designsystem.theme.MagicTheme
 import com.maohongyuan.magic.feature.almanac.AlmanacScreen
 import com.maohongyuan.magic.feature.bazi.BaziScreen
@@ -112,6 +122,12 @@ class MainActivity : ComponentActivity() {
  * 钻取只有两层，手写状态机更贴合项目「无 DI、全手工装配」的既有风格；
  * 且 `NavHost` 会与 [MagicScaffold] 的「每 tab 一个 ScrollState」
  * 和「唯一根 backdrop」两个机制打架。
+ *
+ * ── 容器变形转场（v1.6）──
+ * 状态机不变，只在**渲染层**外面套一层 `SharedTransitionLayout + AnimatedContent`：
+ * 状态切换时新旧两页同时在组合树里，`sharedBounds` 才有「起点 / 终点」可插值。
+ * 卡片与页面的配对 key 由 [MagicPage] 派生，普通 tab 切换没有对应 key，
+ * 自然走回退的淡入淡出。
  */
 @Composable
 private fun MagicApp() {
@@ -168,6 +184,21 @@ private fun MagicApp() {
         GlassQuality.OFF -> GlassMode.OFF
     }
 
+    // 功能页有自己的滚动位置。
+    //
+    // 以前板块页与功能页共用 MagicScaffold 下发的那个 ScrollState，
+    // 于是「进功能页先 scrollTo(0)」会把板块页也归零 ——
+    // 返回时列表跳回顶部，卡片位置和用户的浏览位置一起丢了。
+    // 分开之后，返回必然落在原卡片上，转场起点才对得上。
+    val featureScrolls = remember { HashMap<SystemId, ScrollState>() }
+
+    val page: MagicPage = when {
+        board == AppTab.SETTINGS && showLicenses -> MagicPage.Settings(licenses = true)
+        board == AppTab.SETTINGS -> MagicPage.Settings(licenses = false)
+        openSystem != null -> MagicPage.Feature(openSystem)
+        else -> MagicPage.Board(board)
+    }
+
     CompositionLocalProvider(
         LocalGlassTuning provides GlassTuning(
             refractionScale = settings.refractionScale,
@@ -180,86 +211,162 @@ private fun MagicApp() {
             onSelectTab = { tab = it },
             onBack = onBack,
             glassMode = glassMode,
-        ) { scrollState ->
-            // ── 页面转场 ──
+        ) { boardScrollState ->
+            // ⚠️ SharedTransitionLayout 必须落在 layerBackdrop 子树**内部**。
             //
-            // 用 graphicsLayer 做「淡入 + 从右侧轻滑入」，而不是 AnimatedContent：
-            // 这个 when 分支读的是外层状态，AnimatedContent 的旧内容也会读到新状态，
-            // 结果是「新内容淡入两次」，看不到转场。
-            //
-            // 所以只动进入方向 —— 旧页直接让位，新页 260ms 内淡入并右移归位。
-            // 比硬切好得多，且不会出现状态错乱。
-            val pageKey = when {
-                board == AppTab.SETTINGS && showLicenses -> "licenses"
-                board == AppTab.SETTINGS -> "settings"
-                openSystem == null -> "board-${board.name}"
-                else -> "feature-${openSystem!!.name}"
-            }
-            val enter = remember { Animatable(1f) }
-            LaunchedEffect(pageKey) {
-                enter.snapTo(0f)
-                enter.animateTo(1f, tween(durationMillis = 260, easing = FastOutSlowInEasing))
-            }
-            Box(
-                // ⚠️ 必须 fillMaxSize。少了这行，Box 会 wrap content，
-                // 页面被压成一块圆角白块（实测：进八字页只剩个空胶囊）。
-                modifier = Modifier
-                    .fillMaxSize()
-                    .graphicsLayer {
-                        alpha = 0.25f + 0.75f * enter.value
-                        translationX = (1f - enter.value) * 28f.dp.toPx()
-                    }
-            ) {
-            when (board) {
-                AppTab.SETTINGS -> {
-                    if (showLicenses) {
-                        LicenseScreen(onDismiss = { showLicenses = false })
-                    } else {
-                        SettingsScreen(
-                            settings = settings,
-                            onChange = { next ->
-                                settings = next
-                                scope.launch { settingsStore.update { next } }
-                            },
-                            cloudApiKey = cloudApiKey,
-                            onCloudApiKeyChange = { key ->
-                                cloudApiKey = key
-                                secretStore.put(SecretStore.KEY_CLOUD_API_KEY, key)
-                            },
-                            historyCount = historyCount,
-                            onClearHistory = { scope.launch { recordStore.clear() } },
-                            onOpenLicenses = { showLicenses = true },
-                            scrollState = scrollState,
+            // 共享元素在转场期间被搬到本作用域的 overlay 里绘制；只要 overlay
+            // 还在内容层录制范围内，玻璃表面就仍能通过 LocalBackdrop 采样到背景，
+            // 折射跟着容器一起走。搬到外面就会「动画期间玻璃失效、落位后突然出现」。
+            SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+                AnimatedContent(
+                    targetState = page,
+                    modifier = Modifier.fillMaxSize(),
+                    transitionSpec = { magicPageTransition(initialState, targetState) },
+                    label = "magic-page",
+                ) { target ->
+                    val progress = magicTransitionProgress()
+                    val transitionScope = remember {
+                        MagicTransitionScope(
+                            shared = this@SharedTransitionLayout,
+                            visibility = this,
+                            progressState = progress,
                         )
                     }
-                }
 
-                else -> {
-                    if (openSystem == null) {
-                        BoardScreen(
-                            board = board,
-                            scrollState = scrollState,
-                            onOpen = { openSystems[tab] = it },
-                            onUnavailable = { /* 见 SystemId.available 注释 */ },
-                        )
-                    } else {
-                        // 钻进取顶层：板块页很短，留着上次的滚动位置会让人以为页面是空的
-                        LaunchedEffect(openSystem) { scrollState.scrollTo(0) }
-                        FeatureHost(
-                            system = openSystem,
-                            scrollState = scrollState,
-                            // 功能页之间互相跳转：黄历 → 日运 这类动线要用。
-                            // 目标若在别的板块，连 tab 一起切过去。
-                            onNavigateTo = { target ->
-                                tab = AppTab.entries.indexOf(target.board)
-                                openSystems[target.board.ordinal] = target
-                            },
-                        )
+                    CompositionLocalProvider(
+                        LocalMagicTransitionScope provides transitionScope,
+                        // 只有功能页的大标题参与共享；板块页 / 设置页没有配对的卡片标题。
+                        LocalPageTitleSharedKey provides
+                            (target as? MagicPage.Feature)?.system?.name,
+                        // ⚠️ 必须**按页面**下发，不能沿用 MagicScaffold 那个全局值。
+                        //
+                        // 返回钮是浮层，MagicPageContent 会读这个值来决定顶部内边距。
+                        // 若两页共用同一个值：钻取时它立刻变 true，正在淡出的板块页
+                        // 顶部内边距也跟着涨 44dp —— 实测退场过程中整页会往下跳一下。
+                        LocalBackButtonVisible provides (
+                            target is MagicPage.Feature ||
+                                (target is MagicPage.Settings && target.licenses)
+                            ),
+                    ) {
+                        when (target) {
+                            is MagicPage.Board -> BoardScreen(
+                                board = target.tab,
+                                scrollState = boardScrollState,
+                                onOpen = { openSystems[target.tab.ordinal] = it },
+                                onUnavailable = { /* 见 SystemId.available 注释 */ },
+                            )
+
+                            is MagicPage.Feature -> transitionScope.FeaturePage(
+                                system = target.system,
+                                scrollState = featureScrolls.getOrPut(target.system) {
+                                    ScrollState(0)
+                                },
+                                onNavigateTo = { next ->
+                                    tab = AppTab.entries.indexOf(next.board)
+                                    openSystems[next.board.ordinal] = next
+                                },
+                            )
+
+                            is MagicPage.Settings -> if (target.licenses) {
+                                LicenseScreen(onDismiss = { showLicenses = false })
+                            } else {
+                                SettingsScreen(
+                                    settings = settings,
+                                    onChange = { next ->
+                                        settings = next
+                                        scope.launch { settingsStore.update { next } }
+                                    },
+                                    cloudApiKey = cloudApiKey,
+                                    onCloudApiKeyChange = { key ->
+                                        cloudApiKey = key
+                                        secretStore.put(SecretStore.KEY_CLOUD_API_KEY, key)
+                                    },
+                                    historyCount = historyCount,
+                                    onClearHistory = { scope.launch { recordStore.clear() } },
+                                    onOpenLicenses = { showLicenses = true },
+                                    scrollState = boardScrollState,
+                                )
+                            }
+                        }
                     }
                 }
-            }
             }
         }
+    }
+}
+
+/**
+ * 页面路由。
+ *
+ * 只描述「哪一页」，不持有任何 UI 状态 —— 这样它才能作为
+ * [AnimatedContent] 的 targetState 参与相等性比较，决定是否触发转场。
+ */
+private sealed interface MagicPage {
+
+    /** 板块首页 */
+    data class Board(val tab: AppTab) : MagicPage
+
+    /** 功能页（钻取目标） */
+    data class Feature(val system: SystemId) : MagicPage
+
+    /** 设置页 / 许可页 */
+    data class Settings(val licenses: Boolean) : MagicPage
+}
+
+/**
+ * 页面级转场规格。
+ *
+ * 只有「板块页 ↔ 功能页」这一对使用容器变形；其余（tab 切换、设置页）
+ * 一律走普通淡入淡出 —— 没有来源卡片的导航硬套卡片缩放只会显得莫名其妙。
+ *
+ * ⚠️ 两个分支的 enter/exit **时长**都必须是 [MagicTransitionSpec.DurationMillis]：
+ * `AnimatedContent` 靠退出动画跑完来销毁旧页面，提前销毁会连带取消共享元素转场。
+ */
+private fun magicPageTransition(
+    initial: MagicPage,
+    target: MagicPage,
+): ContentTransform {
+    val isContainerMorph = (initial is MagicPage.Board && target is MagicPage.Feature) ||
+        (initial is MagicPage.Feature && target is MagicPage.Board)
+
+    return if (isContainerMorph) {
+        ContentTransform(
+            targetContentEnter = MagicTransitionSpec.PageEnter,
+            initialContentExit = MagicTransitionSpec.PageExit,
+            sizeTransform = SizeTransform(clip = false),
+        )
+    } else {
+        ContentTransform(
+            targetContentEnter = fadeIn(tween(durationMillis = 240, easing = FastOutSlowInEasing)),
+            initialContentExit = fadeOut(tween(durationMillis = 160)),
+            sizeTransform = SizeTransform(clip = false),
+        )
+    }
+}
+
+/**
+ * 功能页外壳 —— 容器变形的**目标边界**。
+ *
+ * 结构自下而上：
+ * 1. 共享边界（`pageBounds`）：从被点卡片的矩形连续长到整页
+ * 2. 玻璃面板：卡片材质的延续，随进度收角并淡出
+ * 3. 页面本体：跟随容器缩放，前 110ms 保持透明
+ */
+@Composable
+private fun MagicTransitionScope.FeaturePage(
+    system: SystemId,
+    scrollState: ScrollState,
+    onNavigateTo: (SystemId) -> Unit,
+) {
+    MagicContainerTransformSurface(
+        progress = { progress },
+        modifier = pageBounds(system.name, Modifier.fillMaxSize()),
+    ) {
+        FeatureHost(
+            system = system,
+            scrollState = scrollState,
+            onNavigateTo = onNavigateTo,
+        )
     }
 }
 

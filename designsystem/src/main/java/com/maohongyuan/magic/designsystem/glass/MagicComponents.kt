@@ -41,12 +41,24 @@ fun MagicPageHeader(
     modifier: Modifier = Modifier,
 ) {
     val colors = LocalMagicColors.current
+
+    // 大标题参与容器变形转场：从来源卡片的小标题连续放大到这个位置。
+    // key 由路由层经 LocalPageTitleSharedKey 下发，页面自己不需要知道配对关系。
+    val transition = LocalMagicTransitionScope.current
+    val titleKey = LocalPageTitleSharedKey.current
+    val titleModifier = if (transition != null && titleKey != null) {
+        with(transition) { titleBounds(titleKey) }
+    } else {
+        Modifier
+    }
+
     Column(modifier = modifier) {
         Text(
             text = title,
             fontSize = MagicType.largeTitle.sp,
             fontWeight = FontWeight.Bold,
             color = colors.primaryText,
+            modifier = titleModifier,
         )
         if (subtitle != null) {
             Spacer(Modifier.height(MagicSpacing.xs))
