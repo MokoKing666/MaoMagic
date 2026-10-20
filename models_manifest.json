@@ -1,39 +1,24 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "note": "模型本体不入仓库、不打包进 APK。用户在 App 内按需下载。此清单仅提供来源与许可信息。",
-  "warning": "本清单中的 sha256 与 sizeBytes 尚未经过实测校验（verified=false）。发布前必须逐个下载并填入真实哈希值，否则 App 内下载校验会失败。",
   "models": [
     {
-      "id": "gemma-3n-e2b-litertlm",
-      "displayName": "Gemma 3n E2B (LiteRT-LM)",
+      "id": "qwen35-08b-litertlm",
+      "displayName": "Qwen3.5 0.8B (LiteRT-LM, 文本版)",
       "runtime": "litert-lm",
       "format": "litertlm",
-      "url": "https://huggingface.co/google/gemma-3n-E2B-it-litert-lm",
-      "sizeBytes": null,
-      "sha256": null,
-      "license": "Gemma Terms of Use",
-      "licenseUrl": "https://ai.google.dev/gemma/terms",
-      "minRamGb": 6,
-      "abis": ["arm64-v8a"],
-      "recommended": true,
-      "verified": false,
-      "note": "需用户在下载前自行确认并同意 Gemma 使用条款。"
-    },
-    {
-      "id": "gemma3-1b-it-litertlm",
-      "displayName": "Gemma 3 1B IT (LiteRT-LM)",
-      "runtime": "litert-lm",
-      "format": "litertlm",
-      "url": "https://huggingface.co/litert-community/Gemma3-1B-IT",
-      "sizeBytes": null,
-      "sha256": null,
-      "license": "Gemma Terms of Use",
-      "licenseUrl": "https://ai.google.dev/gemma/terms",
+      "url": "https://www.modelscope.cn/models/litert-community/Qwen3.5-0.8B",
+      "fileName": "Qwen3.5-0.8B_int8.litertlm",
+      "sizeBytes": 964566992,
+      "sha256": "25447e2550082aed6145bbc755ec4da5d535f98f6a0c386865fdae2ccb88aed1",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+      "minRuntimeVersion": "0.15.0",
       "minRamGb": 4,
       "abis": ["arm64-v8a"],
-      "recommended": false,
-      "verified": false,
-      "note": "体积更小、速度更快，解卦质量低于 E2B。"
+      "recommended": true,
+      "verified": true,
+      "note": "文本版（不含视觉编码器）。VL 版为 Qwen3.5-0.8B-VL_int8.litertlm（1.30 GB），本项目不需要。大小与 sha256 取自魔搭仓库 API 的 2026-10-16 版本。"
     }
   ]
 }

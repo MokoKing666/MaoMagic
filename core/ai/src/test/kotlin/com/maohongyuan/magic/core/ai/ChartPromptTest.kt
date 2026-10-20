@@ -30,9 +30,14 @@ class ChartPromptTest {
     private fun prompt(system: DivinationSystem): String =
         ChartPrompt.systemPrompt(InterpretationRequest("问一件事", chart = FakeChart(system)))
 
-    /** 砍掉【硬约束 · 术语】这一段 —— 它本身就要列出被禁的词 */
+    /**
+     * 只取**人设正文**：砍掉【硬约束 · 术语】（它本身要列出被禁的词），
+     * 也砍掉后面共用的输出契约（术语对照表里同样会出现这些词）。
+     */
     private fun body(system: DivinationSystem): String =
-        prompt(system).replace(Regex("【硬约束 · 术语】[\\s\\S]*"), "")
+        prompt(system)
+            .substringBefore("【怎么说话")
+            .replace(Regex("【硬约束 · 术语】[\\s\\S]*"), "")
 
     @Test
     fun `塔罗人设正文不含任何六爻术语`() {
@@ -72,14 +77,6 @@ class ChartPromptTest {
         listOf("世应", "纳甲", "六亲", "旬空", "伏神", "用神").forEach {
             assertTrue("六爻人设丢了 $it", p.contains(it))
         }
-        // yongShen 只对六爻输出
-        assertTrue(p.contains("\"yongShen\""))
-    }
-
-    @Test
-    fun `非六爻系统不要求 yongShen 字段`() {
-        assertFalse(prompt(DivinationSystem.TAROT).contains("\"yongShen\""))
-        assertFalse(prompt(DivinationSystem.BA_ZI).contains("\"yongShen\""))
     }
 
     @Test
@@ -87,7 +84,42 @@ class ChartPromptTest {
         DivinationSystem.entries.forEach { s ->
             val p = prompt(s)
             assertTrue("$s 没要求 JSON", p.contains("JSON"))
-            assertTrue("$s 缺边界声明", p.contains("绝对断言"))
+            assertTrue("$s 缺边界声明", p.contains("仅供传统文化研究"))
+        }
+    }
+
+    @Test
+    fun `任何系统都不再索要用神字段 —— 输出不许出现术语`() {
+        DivinationSystem.entries.forEach { s ->
+            assertFalse("$s 仍在要求 yongShen", prompt(s).contains("yongShen"))
+        }
+    }
+
+    @Test
+    fun `所有系统都必须直说，并列出禁止的推脱话`() {
+        DivinationSystem.entries.forEach { s ->
+            val p = prompt(s)
+            assertTrue("$s 缺「必须直说」", p.contains("必须直说"))
+            listOf("卦里没显示", "因人而异", "仅供参考").forEach {
+                assertTrue("$s 缺禁用话术 $it", p.contains(it))
+            }
+        }
+    }
+
+    @Test
+    fun `所有系统都带术语对照表`() {
+        DivinationSystem.entries.forEach { s ->
+            val p = prompt(s)
+            assertTrue("$s 缺术语对照", p.contains("世爻→你自己这一边"))
+            assertTrue("$s 缺应爻对照", p.contains("应爻→对方那一边"))
+        }
+    }
+
+    @Test
+    fun `所有系统都要求建议可落地`() {
+        DivinationSystem.entries.forEach { s ->
+            val p = prompt(s)
+            assertTrue("$s 缺落地要求", p.contains("那我明天做什么"))
         }
     }
 

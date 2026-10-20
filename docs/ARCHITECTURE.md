@@ -162,6 +162,24 @@ Tier2/Tier3 的系统提示词由 `ChartPrompt.systemPrompt(request)` 按
 
 回归测试：`core/ai/src/test/.../ChartPromptTest.kt`。
 
+### 端上模型：Qwen3.5-0.8B 的「一个 Engine 只能跑一段会话」
+
+v1.7.0 把端上模型从 Gemma 4 E2B 换成 **Qwen3.5-0.8B（int8，文本版，920 MB）**。
+
+Qwen3.5 是混合架构：GatedDeltaNet 线性注意力块 + 6 层全注意力。
+线性注意力块带**常量大小的循环状态**，而 LiteRT-LM 新建 Conversation 时
+**不会重置它**（[LiteRT-LM#3165]）。模型卡实测：在跑过对话的 Engine 上开新会话，
+9 次里 **0 次**遵守新的系统提示词。
+
+对本项目就是灾难 —— 第一卦人设对，第二卦开始变成上一卦的口气。
+
+所以 `LiteRtLmBackend` 改成 **一次解卦 = 一个 Engine**，用完立刻关
+（`withFreshEngine`）。代价是每次多一两秒重新映射权重，换来人设稳定。
+**不要「优化」成复用 Engine。**
+
+另外换单模型后，原来的「模型变体」选择器（自动 / GPU 版 / 通用版）已删除 ——
+只有一个文件，通吃 NPU / GPU / CPU。
+
 ---
 
 ## 五、决策 4：全局流体玻璃的「唯一根 backdrop」

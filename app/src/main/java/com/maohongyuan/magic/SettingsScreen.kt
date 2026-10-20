@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.maohongyuan.magic.core.ai.LocalModel
 import com.maohongyuan.magic.core.interpret.InferencePrefs
 import com.maohongyuan.magic.core.data.ColorScheme
 import com.maohongyuan.magic.core.data.GlassQuality
@@ -209,35 +210,18 @@ fun SettingsScreen(
             )
             Spacer(Modifier.height(MagicSpacing.cardPadding))
 
-            MagicLabel("模型变体")
+            // 「模型变体」选择器已删除。
+            //
+            // 上一版是 Gemma 4 E2B，按加速器发了 GPU 版 / 通用版两个文件，
+            // 需要用户自己选（无 OpenCL 的机器只能选通用版）。
+            // 换成 Qwen3.5-0.8B 之后**只有一个文件**，通吃 NPU / GPU / CPU，
+            // 再摆一个选不动的分段控件只会让人以为哪里没配好。
+            MagicLabel("端上模型")
             Spacer(Modifier.height(MagicSpacing.row))
-            // 自动推荐只看 SoC，看不出「这台机器有没有 OpenCL」——
-            // GPU 版只含 GPU 编译图，无 OpenCL 的设备必须手动选通用版。
-            MagicLiquidSegmentedControl(
-                options = listOf("自动", "GPU 版", "通用版"),
-                selectedIndex = when (settings.modelVariant) {
-                    "GPU" -> 1
-                    "GENERIC" -> 2
-                    else -> 0
-                },
-                onSelect = {
-                    onChange(
-                        settings.copy(
-                            modelVariant = when (it) {
-                                1 -> "GPU"
-                                2 -> "GENERIC"
-                                else -> "AUTO"
-                            }
-                        )
-                    )
-                },
-            )
-            Spacer(Modifier.height(MagicSpacing.xs))
             MagicCaption(
-                when (settings.modelVariant) {
-                    "GPU" -> "GPU 版（1.9 GB）：只有 GPU 图，需要设备支持 OpenCL。"
-                    "GENERIC" -> "通用版（2.4 GB）：含 CPU 图，没有 OpenCL 的设备只能用它。"
-                    else -> "自动：按机型推荐。如果提示「找不到 OpenCL」，改选通用版。"
+                run {
+                    val m = LocalModel.candidatesFor().first()
+                    "${m.label}（${m.sizeBytes / 1048576} MB，文本版）· 一个文件通吃 NPU / GPU / CPU。"
                 }
             )
             Spacer(Modifier.height(MagicSpacing.cardPadding))

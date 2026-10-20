@@ -164,6 +164,6 @@ class CloudAiTest {
         // 这三条是防止模型自由发挥的关键约束，缺了就会得到乱七八糟的输出
         assertTrue("必须禁止模型自行重排", sys.contains("重排") && sys.contains("不要"))
         assertTrue("必须要求 JSON 输出", sys.contains("JSON"))
-        assertTrue("必须包含免责边界", sys.contains("不要") && sys.contains("断言"))
+        assertTrue("必须包含免责边界", sys.contains("仅供传统文化研究"))
     }
 }
