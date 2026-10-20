@@ -34,6 +34,11 @@ android {
 dependencies {
     api(project(":core:interpret"))
 
+    // ChartPrompt 要给塔罗 / 小六壬渲染结构化盘面，才能按系统分派人设。
+    // 用 implementation：这两个类型不出现在本模块的公开签名里。
+    implementation(project(":core:tarot"))
+    implementation(project(":core:xiaoliuren"))
+
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.okhttp)

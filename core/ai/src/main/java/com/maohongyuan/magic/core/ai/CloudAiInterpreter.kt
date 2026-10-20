@@ -88,7 +88,7 @@ class CloudAiInterpreter private constructor(
                 model = config.model,
                 temperature = config.temperature,
                 messages = listOf(
-                    ChatMessage("system", ChartPrompt.SYSTEM_PROMPT),
+                    ChatMessage("system", ChartPrompt.systemPrompt(request)),
                     ChatMessage("user", ChartPrompt.userMessage(request)),
                 ),
             )

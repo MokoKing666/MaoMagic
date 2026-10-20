@@ -158,9 +158,11 @@ class CloudAiTest {
 
     @Test
     fun `系统提示词写明了不许重排与必须输出 JSON`() {
-        val sys = ChartPrompt.SYSTEM_PROMPT
+        // 人设按盘的系统分派，这里用六爻盘取一份提示词
+        val chart = MeihuaDivination.chart(Hexagram.of(1), 0)
+        val sys = ChartPrompt.systemPrompt(InterpretationRequest("问", chart = chart))
         // 这三条是防止模型自由发挥的关键约束，缺了就会得到乱七八糟的输出
-        assertTrue("必须禁止模型自行重排", sys.contains("绝对不要") || sys.contains("不要自己重新排盘"))
+        assertTrue("必须禁止模型自行重排", sys.contains("重排") && sys.contains("不要"))
         assertTrue("必须要求 JSON 输出", sys.contains("JSON"))
         assertTrue("必须包含免责边界", sys.contains("不要") && sys.contains("断言"))
     }

@@ -26,7 +26,7 @@ import java.io.File
  * 通过 [InterpretationRequest.facts] 传进来；本引擎只把这些事实**说成人话**。
  *
  * ── 输出解析：先试 JSON，失败退纯文本 ──
- * `ChartPrompt.SYSTEM_PROMPT` 是给云端写的，里面**要求输出 JSON**。
+ * `ChartPrompt.systemPrompt()` 按盘的系统分派人设，里面**要求输出 JSON**。
  * 端上模型照做，所以拿到的通常是：
  * ```
  * {"verdict":"…","headline":"…","sections":[{"title":"…","body":"…","tone":"…"}]}
@@ -55,7 +55,7 @@ class OnDeviceInterpreter(
         val b = backend ?: return@flow
 
         val raw = b.generate(
-            systemPrompt = ChartPrompt.SYSTEM_PROMPT,
+            systemPrompt = ChartPrompt.systemPrompt(request),
             userMessage = ChartPrompt.userMessage(request),
         ) ?: throw IllegalStateException(b.errorMessage ?: "端上模型没有返回结果")
 
