@@ -208,6 +208,25 @@ fun LiuyaoScreen(scrollState: ScrollState) {
         }
 
         state.interpretation?.let { InterpretationCard(it) }
+        // 解读中必须有反馈。
+        //
+        // 端上模型要几秒到几十秒，之前这里什么都不画 —— 用户看到的是「点完没反应」，
+        // 只会以为功能坏了。占位卡不写进度，只写一句「在算」，比空白强得多。
+        if (state.interpreting) {
+            GlassCard(level = GlassLevel.Thin) {
+                Text(
+                    text = "正在解卦…",
+                    fontSize = MagicType.body.sp,
+                    color = colors.secondaryText,
+                )
+                Spacer(Modifier.height(MagicSpacing.xs))
+                Text(
+                    text = "端上模型要现算，通常十几秒。先把卦盘看完，不用一直等。",
+                    fontSize = MagicType.footnote.sp,
+                    color = colors.tertiaryText,
+                )
+            }
+        }
         state.interpretationError?.let { message ->
             Text(
                 text = "所选解卦模式调用失败：$message",

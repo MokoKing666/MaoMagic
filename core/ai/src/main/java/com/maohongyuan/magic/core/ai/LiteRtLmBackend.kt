@@ -7,6 +7,7 @@ import com.google.ai.edge.litertlm.Content
 import com.google.ai.edge.litertlm.Conversation
 import com.google.ai.edge.litertlm.Engine
 import com.google.ai.edge.litertlm.EngineConfig
+import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.Modality
 import com.google.ai.edge.litertlm.ModelInfo
 import com.maohongyuan.magic.core.interpret.InferencePrefs
@@ -29,34 +30,36 @@ import java.io.File
  * 卦理由规则引擎算好后经 `InterpretationRequest.facts` 传进来。
  * 本后端拿到的是「已定论的事实 + 盘面」，任务是写成通顺中文，**不许重推**。
  *
- * ── 后端降级顺序 ──
- * `NPU → GPU → CPU`。NPU 起不来是常态（机型、驱动、运行时缺失），
- * 不是异常，所以逐级 runCatching，最后一定能落到 CPU。
- * **这是「下载了但跑不起来」的唯一兜底，不能省。**
+ * ── ⚠️ 三条硬约束（都是实测踩出来的，改代码前先读）──
  *
- * ── ⚠️ 每次生成都新建 Engine ──
- * 换成 Qwen3.5 之后这条变成了硬约束。Qwen3.5 是混合架构
- * （GatedDeltaNet 线性注意力 + 6 层全注意力），线性注意力块带**常量大小的
- * 循环状态**，而 LiteRT-LM 新建 Conversation 时**不会重置它**
- * （[google-ai-edge/LiteRT-LM#3165]）。
+ * **1. 一次解卦 = 一个 Engine。**
+ * Qwen3.5 是混合架构（GatedDeltaNet 线性注意力 + 6 层全注意力），
+ * 线性注意力块带常量大小的循环状态，而 LiteRT-LM 新建 Conversation 时
+ * **不重置它**（LiteRT-LM#3165）。模型卡实测：在跑过对话的 Engine 上开新会话，
+ * 9 次里 0 次遵守系统提示词 —— 等于第一卦人设对、第二卦起就变成上一卦的口气。
  *
- * 模型卡实测：在跑过对话的 Engine 上开新会话，9 次里 **0 次**遵守新的系统提示词，
- * 而且 9 次里有 7 次吐空的 `<think></think>` 块。
+ * **2. 不要「先探测再生成」，那会白跑一次初始化。**
+ * 每次 `Engine.initialize()` 在手机上要十几到几十秒（见下条）。
+ * 早期实现先建一个 Engine 探后端、再建一个做推理，等于把首次等待翻倍。
+ * 现在探测与生成合并：候选后端逐个「建 Engine + 直接生成」，第一个成功的就记住。
  *
- * 对本项目来说这就是灾难 —— 第一卦人设对，第二卦开始变成上一卦的口气，
- * 用户会以为「提示词没生效」。
- *
- * 所以：**一次解卦 = 一个 Engine**，用完立刻关。代价是每次多花一两秒重新
- * 映射权重（0.8B int8 约 920 MB，比原来的 2.4 GB 快得多），换来的是人设稳定。
+ * **3. NPU 只在模型自述支持时才试；GPU 是否优先看 SoC。**
+ * - `Backend.NPU(...)` 的 `initialize()` 在不支持的机器上会**死等不返回**
+ *   （不是抛异常），`withTimeout` 也取消不了阻塞的 native 调用。
+ *   唯一可靠的防线是根本不去试。Qwen3.5-0.8B 自述 `backends=CPU/GPU`，不含 NPU。
+ * - 天玑 9400（MT6991）实测：GPU 初始化 **198 秒**，CPU **25 秒**。
+ *   GPU 委派在这种混合架构上对 Mali 的图切分开销极大。
+ *   模型卡上的 GPU 数据来自 Adreno / Apple，不能外推到 Mali。
+ *   所以 AUTO 按 GPU 厂商分流，见 [autoOrder]。
  */
 class LiteRtLmBackend(
     private val context: Context,
     private val modelFile: File,
-    /** 是否尝试 NPU。天玑/骁龙的 NPU 需要对应运行时，缺了就自动退 GPU */
+    /** 是否允许在模型声明支持时尝试 NPU */
     private val preferNpu: Boolean = true,
 ) : LocalModelBackend {
 
-    /** 探测出来的可用后端名。null = 还没探测过 */
+    /** 上次成功的后端名。null = 还没成功过 */
     private var chosenBackendName: String? = null
     private var lastError: String? = null
 
@@ -65,115 +68,89 @@ class LiteRtLmBackend(
 
     override val errorMessage: String? get() = lastError
 
-    /**
-     * 探测可用后端并记住它。
-     *
-     * 首次会花几秒（要真的初始化一次 Engine 才知道 NPU/GPU 能不能用）。
-     * **不要在 UI 线程调，也不要在启动时无条件调** —— 用户点了智能解卦再加载。
-     *
-     * 探测完**不留常驻 Engine**：每次生成都要新建，见类注释。
-     */
-    suspend fun load(): Boolean = withContext(Dispatchers.IO) {
-        LlmLog.init(context)
-        if (chosenBackendName != null) return@withContext true
-        if (!modelFile.exists()) {
-            lastError = "模型文件不存在：${modelFile.absolutePath}"
-            LlmLog.e(lastError!!)
-            return@withContext false
-        }
-        LlmLog.i("开始探测：${modelFile.absolutePath} (${modelFile.length() / 1048576} MB)")
-
-        // 读模型自己声明的能力 —— 只用于日志与排查，**不参与后端选择**。
-        // 之前用它过滤候选，结果模型声明与实际能起什么不一致，导致整链失效。
-        val info = withTimeoutOrNull(15_000) { readModelInfo() }
-        LlmLog.i("模型自述 → ${info ?: "读取超时或失败"}")
-
-        val names = backendCandidates()
-        LlmLog.i("后端偏好=${InferencePrefs.backend.name}，候选=$names")
-
-        for (name in names) {
-            val outcome = runCatching { withFreshEngine(name) { } }
-            if (outcome.isSuccess) {
-                chosenBackendName = name
-                lastError = null
-                LlmLog.i("$name 后端探测成功")
-                return@withContext true
-            }
-            LlmLog.w("$name 后端失败，尝试下一个", outcome.exceptionOrNull())
-        }
-
-        lastError = "后端 ${InferencePrefs.backend.name} 初始化失败"
-        LlmLog.e(lastError!!)
-        false
-    }
-
-    /**
-     * 直接问模型：你支持什么。
-     *
-     * `ModelInfo.from()` 只解析元数据不加载权重，但在 GB 级文件上实测要几秒，
-     * 所以放宽到 15 秒。**结果只写日志**，不参与后端选择。
-     */
-    private suspend fun readModelInfo(): String? = withContext(Dispatchers.IO) {
-        runCatching {
-            ModelInfo.from(modelFile.absolutePath).use { m ->
-                val backends = runCatching { m.supportedBackends(Modality.TEXT) }
-                    .getOrNull()?.joinToString("/") ?: "?"
-                val npu = runCatching { m.npuBrand(Modality.TEXT) }.getOrNull()
-                val soc = runCatching { m.socName(Modality.TEXT) }.getOrNull()
-                buildString {
-                    append("backends=$backends")
-                    append(" npuBrand=$npu")
-                    append(" soc=$soc")
-                    append(" minRuntime=${m.minRuntimeVersion()}")
-                    append(" maxCtx=${m.maxContextTokens()}")
-                    append(" gpu=${BackendType.GPU in (runCatching { m.supportedBackends(Modality.TEXT) }.getOrNull() ?: emptyList())}")
-                }
-            }
-        }.onFailure { LlmLog.w("读取模型元数据失败", it) }.getOrNull()
-    }
-
     override suspend fun isReady(): Boolean = chosenBackendName != null
 
     /**
      * 生成一段文本。
      *
-     * ⚠️ 每次都新建 Engine + Conversation，用完立刻关 —— 见类注释。
-     * 复用 Engine 会让 Qwen3.5 带着上一卦的循环状态继续跑，系统提示词直接失效。
+     * 每次都新建 Engine + Conversation，用完立刻关 —— 见类注释第 1 条。
+     * 候选后端逐个实测：第一个能跑通的就记住，下次直接用。
      */
     override suspend fun generate(systemPrompt: String, userMessage: String): String? =
         withContext(Dispatchers.IO) {
-            if (chosenBackendName == null && !load()) return@withContext null
-            val name = chosenBackendName ?: return@withContext null
-
-            val prompt = "$systemPrompt\n\n$userMessage"
-            LlmLog.i("开始推理（$name），prompt ${prompt.length} 字符")
-            val t0 = System.currentTimeMillis()
-            val outcome = runCatching {
-                withFreshEngine(name) { conv -> conv.sendMessage(prompt) }
-            }
-
-            outcome.onFailure {
-                lastError = "推理失败：${it.message}"
-                LlmLog.e("推理失败", it)
-                // 后端可能已经不可用（被系统回收、驱动异常）—— 清掉缓存，下次重新探测
-                chosenBackendName = null
-            }
-
-            val text = outcome.getOrNull()
-                ?.contents
-                ?.contents
-                ?.filterIsInstance<Content.Text>()
-                ?.joinToString("") { it.text }
-                ?.trim()
-
-            if (text.isNullOrBlank()) {
-                lastError = lastError ?: "模型返回空文本"
-                LlmLog.w(lastError!!)
+            LlmLog.init(context)
+            if (!modelFile.exists()) {
+                lastError = "模型文件不存在：${modelFile.absolutePath}"
+                LlmLog.e(lastError!!)
                 return@withContext null
             }
-            LlmLog.i("推理完成，${text.length} 字符，耗时 ${System.currentTimeMillis() - t0} ms")
-            text
+
+            val names = resolveCandidates()
+            if (names.isEmpty()) {
+                lastError = "模型不支持所选后端（${InferencePrefs.backend.name}）"
+                LlmLog.e(lastError!!)
+                return@withContext null
+            }
+
+            val prompt = "$systemPrompt\n\n$userMessage"
+            LlmLog.i("开始推理，候选=$names，prompt ${prompt.length} 字符")
+
+            for (name in names) {
+                val t0 = System.currentTimeMillis()
+                val outcome = runCatching {
+                    withFreshEngine(name) { conv -> conv.sendMessage(prompt) }
+                }
+
+                val text = outcome.getOrNull()?.let(::extractText)
+                if (outcome.isSuccess && !text.isNullOrBlank()) {
+                    chosenBackendName = name
+                    lastError = null
+                    LlmLog.i(
+                        "推理完成（$name），${text.length} 字符，" +
+                            "总耗时 ${System.currentTimeMillis() - t0} ms",
+                    )
+                    return@withContext text
+                }
+
+                // 空文本也算失败：换个后端还有机会，直接返回会让用户看到空白。
+                if (outcome.isSuccess) {
+                    LlmLog.w("$name 返回空文本，尝试下一个")
+                } else {
+                    LlmLog.w("$name 推理失败，尝试下一个", outcome.exceptionOrNull())
+                }
+            }
+
+            chosenBackendName = null
+            lastError = "所有后端都未能产出结果"
+            LlmLog.e(lastError!!)
+            null
         }
+
+    /** 从响应里取出纯文本 */
+    private fun extractText(response: Message): String =
+        response.contents.contents
+            .filterIsInstance<Content.Text>()
+            .joinToString("") { it.text }
+            .trim()
+
+    /**
+     * 候选后端名。
+     *
+     * 已经成功过就只用那一个 —— 换后端意味着重新初始化，没必要。
+     * 第一次才需要读模型自述 + 按 SoC 排序。
+     */
+    private suspend fun resolveCandidates(): List<String> {
+        chosenBackendName?.let { return listOf(it) }
+
+        // 模型自述只用来判断「要不要试 NPU」，别的判断一概不做。
+        // 之前用它过滤 GPU 候选，结果声明与实际不一致，整链失效。
+        val info = withTimeoutOrNull(15_000) { readModelInfo() }
+        LlmLog.i("模型自述 → ${info?.summary ?: "读取超时或失败"}")
+
+        val names = backendCandidates(info?.backends)
+        LlmLog.i("后端偏好=${InferencePrefs.backend.name}，候选=$names")
+        return names
+    }
 
     /**
      * 建一个全新的 Engine 跑一段逻辑，结束时一定关掉。
@@ -182,6 +159,7 @@ class LiteRtLmBackend(
      * 连开几次就把应用撑爆。
      */
     private inline fun <T> withFreshEngine(backendName: String, block: (Conversation) -> T): T {
+        val t0 = System.currentTimeMillis()
         val engine = Engine(
             EngineConfig(
                 modelPath = modelFile.absolutePath,
@@ -190,8 +168,11 @@ class LiteRtLmBackend(
             )
         )
         try {
+            LlmLog.i("[$backendName] Engine 已构造，开始 initialize")
             engine.initialize()
+            LlmLog.i("[$backendName] initialize 完成，耗时 ${System.currentTimeMillis() - t0} ms")
             val conv = engine.createConversation()
+            LlmLog.i("[$backendName] 会话已建，耗时 ${System.currentTimeMillis() - t0} ms")
             try {
                 return block(conv)
             } finally {
@@ -199,6 +180,7 @@ class LiteRtLmBackend(
             }
         } finally {
             runCatching { engine.close() }
+            LlmLog.i("[$backendName] Engine 已释放，总耗时 ${System.currentTimeMillis() - t0} ms")
         }
     }
 
@@ -208,23 +190,89 @@ class LiteRtLmBackend(
         else -> Backend.CPU()
     }
 
-    private fun backendCandidates(): List<String> = when (InferencePrefs.backend) {
-        InferencePrefs.BackendPref.NPU -> listOf("NPU")
-        InferencePrefs.BackendPref.GPU -> listOf("GPU")
-        InferencePrefs.BackendPref.CPU -> listOf("CPU")
-        InferencePrefs.BackendPref.AUTO -> buildList {
-            if (preferNpu) add("NPU")
-            add("GPU")
-            add("CPU")
-        }
+    /** 模型自述：声明支持的后端集合 + 一段给人看的摘要 */
+    private data class ModelFacts(val backends: Set<BackendType>, val summary: String)
+
+    /**
+     * 直接问模型：你支持什么。
+     *
+     * `ModelInfo.from()` 只解析元数据不加载权重，但在 GB 级文件上实测要几秒，
+     * 所以放宽到 15 秒。
+     */
+    private suspend fun readModelInfo(): ModelFacts? = withContext(Dispatchers.IO) {
+        runCatching {
+            ModelInfo.from(modelFile.absolutePath).use { m ->
+                val declared = runCatching { m.supportedBackends(Modality.TEXT) }
+                    .getOrNull()?.toSet() ?: emptySet()
+                val npu = runCatching { m.npuBrand(Modality.TEXT) }.getOrNull()
+                val soc = runCatching { m.socName(Modality.TEXT) }.getOrNull()
+                ModelFacts(
+                    backends = declared,
+                    summary = buildString {
+                        append("backends=")
+                        append(declared.joinToString("/") { it.name }.ifEmpty { "?" })
+                        append(" npuBrand=$npu")
+                        append(" soc=$soc")
+                        append(" minRuntime=${m.minRuntimeVersion()}")
+                        append(" maxCtx=${m.maxContextTokens()}")
+                    },
+                )
+            }
+        }.onFailure { LlmLog.w("读取模型元数据失败", it) }.getOrNull()
     }
 
-    /** 释放。Engine 是每次生成临时建的，这里只清探测结果 */
+    /**
+     * 候选后端。
+     *
+     * ⚠️ **NPU 只有在模型自己声明支持时才试**，其余情况一律跳过。
+     *
+     * Qwen3.5-0.8B 自述 `backends=CPU/GPU`，不含 NPU；而在天玑 9400 上
+     * `Backend.NPU(...)` 的 `initialize()` **死等不返回** —— 不是抛异常，是永远挂着。
+     * 用户点了解卦，界面一直空着，日志停在「[NPU] Engine 已构造，开始 initialize」。
+     *
+     * `initialize()` 是阻塞的 native 调用，`withTimeout` 取消不了它，
+     * 所以唯一可靠的防线是**根本不去试**。声明读不到（null）时同样跳过：
+     * GPU/CPU 一定能覆盖，而错试一次 NPU 的代价是整个解卦卡死。
+     */
+    private fun backendCandidates(declared: Set<BackendType>?): List<String> {
+        val wanted = when (InferencePrefs.backend) {
+            InferencePrefs.BackendPref.NPU -> listOf("NPU")
+            InferencePrefs.BackendPref.GPU -> listOf("GPU")
+            InferencePrefs.BackendPref.CPU -> listOf("CPU")
+            InferencePrefs.BackendPref.AUTO -> autoOrder()
+        }
+        val npuSupported = preferNpu && declared != null && BackendType.NPU in declared
+        if (npuSupported) return listOf("NPU") + wanted.filterNot { it == "NPU" }
+        if (wanted.contains("NPU")) {
+            LlmLog.w("模型未声明支持 NPU，跳过（避免 initialize 挂死）")
+        }
+        return wanted.filterNot { it == "NPU" }
+    }
+
+    /**
+     * AUTO 的后端顺序。
+     *
+     * ⚠️ 默认**不是**「GPU 优先」—— 实测踩过：
+     * 天玑 9400（MT6991）+ Qwen3.5-0.8B，GPU 后端的 `initialize()` 要 **198 秒**，
+     * 同机 CPU 只要 **25 秒**。GPU 委派在这种混合架构上对 Mali 的图切分开销极大。
+     *
+     * 模型卡上的 GPU 数据来自 Galaxy S26（Adreno）与 iPhone，不能外推到 Mali。
+     *
+     * 所以按厂商分流：高通 / Google Tensor → GPU 优先；其余 → CPU 优先，GPU 兜底。
+     * 拿不准就 CPU 优先：慢一点但一定跑得起来，总比让用户等三分钟强。
+     */
+    private fun autoOrder(): List<String> {
+        val gpuFirst = runCatching {
+            val p = DeviceProfile.current()
+            val vendor = p.socManufacturer.uppercase()
+            vendor.contains("QTI") || vendor.contains("QUALCOMM") ||
+                vendor.contains("GOOGLE") || p.socModel.uppercase().startsWith("TENSOR")
+        }.getOrDefault(false)
+        return if (gpuFirst) listOf("GPU", "CPU") else listOf("CPU", "GPU")
+    }
+
+    /** 释放。Engine 是每次生成临时建的，这里只清记忆 */
     fun close() {
         chosenBackendName = null
-    }
-
-    private companion object {
-        const val TAG = "MaoMagicLLM"
     }
 }

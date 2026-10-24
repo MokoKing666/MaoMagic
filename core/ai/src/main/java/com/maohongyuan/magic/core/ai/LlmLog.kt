@@ -12,8 +12,11 @@ import java.io.File
  * `Log.i` 调用成功但日志不出现在缓冲区，排查时一片空白，
  * 会误判成「代码没执行」。
  *
- * 所以同时写一份到应用私有目录 `files/llm.log`，
- * 用 `adb shell run-as <pkg> cat files/llm.log` 就能读到，不依赖 logcat。
+ * 所以同时写一份到**外部私有目录** `/sdcard/Android/data/<pkg>/files/llm.log`，
+ * 用 `adb shell cat //sdcard/Android/data/<pkg>/files/llm.log` 就能读到。
+ *
+ * ⚠️ 不要改回内部 `filesDir`：那里只有 `run-as` 能读，而 `run-as` 只对
+ * debuggable 包有效 —— release 出问题时就彻底没日志了（踩过）。
  *
  * 文件大小上限 256 KB，超出后截断重写 —— 避免长期运行撑爆存储。
  */
@@ -26,7 +29,17 @@ object LlmLog {
     private var file: File? = null
 
     fun init(context: Context) {
-        if (file == null) file = File(context.filesDir, "llm.log")
+        if (file == null) {
+            // ⚠️ 优先写**外部私有目录**（/sdcard/Android/data/<pkg>/files/llm.log）。
+            //
+            // 内部 filesDir 只有 `run-as` 能读，而 `run-as` 只对 debuggable 包有效 ——
+            // release 包出问题时根本取不到日志，只能让用户装 debug 版重下 920 MB 模型。
+            // 外部私有目录 adb shell 可以直接 `ls` / `cat`，不需要 root，也不需要 debuggable。
+            //
+            // 这个目录不需要任何权限（应用自己的外部私有空间），卸载即清理。
+            val ext = context.getExternalFilesDir(null)
+            file = File(ext ?: context.filesDir, "llm.log")
+        }
     }
 
     fun i(msg: String) = write("I", msg, null)
