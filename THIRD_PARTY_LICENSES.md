@@ -139,3 +139,42 @@ https://moji.or.jp/ipafont/ipafontdownload/ and replace the font file in <direct
 详见 `models_manifest.json` 中每个模型条目的 `license` 字段。
 
 本项目不对第三方模型的许可合规性作任何担保，请用户自行确认后再下载使用。
+
+---
+
+## 6. laozi-perspective（老子视角提示词）
+
+- **用途**：设置页「解读风格 → 老子视角」的提示词。**仅改编文本，不引入代码依赖**
+- **来源**：https://github.com/chmxn/laozi-perspective
+- **许可**：MIT License
+- **版权**：Copyright (c) chmxn
+- **改编范围**：原 SKILL.md 约 24 KB（6 个心智模型 + 8 条决策启发式 + 表达 DNA）。
+  本项目只取其「五个过账问题」（反者道之动 / 无为 / 柔弱胜刚强 / 知足知止 / 返朴归真）
+  与表达规则，压缩到 1 KB 以内，因为端上是 0.8B 小模型，整份塞进去会稀释指令。
+  原文的 Agentic 联网研究流程（Step 2 的 WebSearch）已删除 —— 端上模型无网络。
+  原文主张的「不把话说满」与本项目「不许模棱两可」的要求冲突，
+  改为「结论必须明确，留白只用于正文展开」。
+- **实现在**：`core/ai/src/main/java/com/maohongyuan/magic/core/ai/ChartPrompt.kt`
+  的 `LAOZI_VOICE`
+
+```
+MIT License
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

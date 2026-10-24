@@ -142,7 +142,12 @@ private fun MagicApp() {
             settings = s
             // 把偏好同步到全局缓存 —— 降级链与端上后端都从那里读。
             // 放这里而不是设置页里，是为了冷启动时就生效。
-            InferencePrefs.update(s.engineTier, s.inferenceBackend, s.modelVariant)
+            InferencePrefs.update(
+                s.engineTier,
+                s.inferenceBackend,
+                s.modelVariant,
+                s.interpretStyle,
+            )
         }
     }
 

@@ -18,12 +18,12 @@ object InferencePrefs {
     /**
      * 端上模型的后端偏好。
      *
-     * `AUTO` 按 NPU → GPU → CPU 依次尝试。
+     * `AUTO` 按 SoC 分流：高通 Adreno / Google Tensor 先试 GPU，其余（Mali 等）先试 CPU。
      * 手动选定时**只试那一个** —— 否则「选了 CPU 却偷偷用 GPU」，
      * 用户的选择就不可信了。
      */
     enum class BackendPref(val label: String, val description: String) {
-        AUTO("自动", "按 NPU → GPU → CPU 依次尝试，取第一个能用的。"),
+        AUTO("自动", "按芯片分流：骁龙 / Tensor 先试 GPU，联发科等先试 CPU（实测 Mali 的 GPU 委派反而更慢）。"),
         NPU(
             "NPU",
             "只试 NPU。⚠️ 当前不可用 —— litertlm-android 只带了 JNI 库，" +
@@ -50,8 +50,24 @@ object InferencePrefs {
     @Volatile
     var modelVariant: String = "AUTO"
 
-    fun update(tierName: String?, backendName: String?, variant: String? = null) {
+    /**
+     * 解卦的说话风格。
+     *
+     * 与 [backend] 一样是全局缓存：风格要被 `ChartPrompt` 读到，
+     * 而 ChartPrompt 在 12 个 feature 里被间接调用，逐个传参不现实。
+     * 真值在 [com.maohongyuan.magic.core.data.MagicSettings.interpretStyle]。
+     */
+    @Volatile
+    var style: InterpretationStyle = InterpretationStyle.ZENG_SHIQIANG
+
+    fun update(
+        tierName: String?,
+        backendName: String?,
+        variant: String? = null,
+        styleName: String? = null,
+    ) {
         if (variant != null) modelVariant = variant
+        if (styleName != null) style = InterpretationStyle.of(styleName)
         preferredTier = when (tierName) {
             "ON_DEVICE" -> EngineTier.ON_DEVICE
             "CLOUD_AI" -> EngineTier.CLOUD_AI

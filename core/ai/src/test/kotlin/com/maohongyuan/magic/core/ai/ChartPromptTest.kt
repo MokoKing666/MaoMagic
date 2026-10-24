@@ -1,6 +1,7 @@
 package com.maohongyuan.magic.core.ai
 
 import com.maohongyuan.magic.core.interpret.InterpretationRequest
+import com.maohongyuan.magic.core.interpret.InterpretationStyle
 import com.maohongyuan.magic.core.model.DivinationChart
 import com.maohongyuan.magic.core.model.DivinationSystem
 import com.maohongyuan.magic.core.tarot.TarotDivination
@@ -143,5 +144,79 @@ class ChartPromptTest {
         )
         assertTrue(msg.contains(DivinationSystem.QI_MEN.label))
         assertTrue(msg.contains("不要虚构盘面"))
+    }
+
+    // ── 风格切换（老子视角）──────────────────────────────
+
+    private fun styled(system: DivinationSystem, style: InterpretationStyle): String =
+        ChartPrompt.systemPrompt(
+            InterpretationRequest("问一件事", chart = FakeChart(system)),
+            style = style,
+        )
+
+    @Test
+    fun `两种风格产出不同提示词`() {
+        val a = styled(DivinationSystem.LIU_YAO, InterpretationStyle.ZENG_SHIQIANG)
+        val b = styled(DivinationSystem.LIU_YAO, InterpretationStyle.LAOZI)
+        assertTrue("两种风格不应完全相同", a != b)
+    }
+
+    @Test
+    fun `老子风格带五个过账问题`() {
+        val p = styled(DivinationSystem.LIU_YAO, InterpretationStyle.LAOZI)
+        listOf("反者道之动", "无为", "柔弱胜刚强", "知足知止", "返朴归真").forEach {
+            assertTrue("老子风格缺 $it", p.contains(it))
+        }
+        assertTrue("缺短句要求", p.contains("句子短"))
+    }
+
+    @Test
+    fun `换风格不丢硬规矩 —— JSON 直说 术语对照 落地`() {
+        DivinationSystem.entries.forEach { s ->
+            val p = styled(s, InterpretationStyle.LAOZI)
+            assertTrue("$s 老子风格丢了 JSON", p.contains("JSON"))
+            assertTrue("$s 老子风格丢了直说", p.contains("必须直说"))
+            assertTrue("$s 老子风格丢了术语对照", p.contains("世爻→你自己这一边"))
+            assertTrue("$s 老子风格丢了落地要求", p.contains("那我明天做什么"))
+            assertTrue("$s 老子风格丢了边界", p.contains("仅供传统文化研究"))
+        }
+    }
+
+    @Test
+    fun `老子风格不再带曾仕强的口头禅`() {
+        val p = styled(DivinationSystem.LIU_YAO, InterpretationStyle.LAOZI)
+        listOf("我跟你讲", "对不对？", "拉家常").forEach {
+            assertFalse("老子风格里混进了曾仕强的话术 $it", p.contains(it))
+        }
+    }
+
+    @Test
+    fun `老子风格要求结论明确，不许拿留白躲问题`() {
+        val p = styled(DivinationSystem.LIU_YAO, InterpretationStyle.LAOZI)
+        // SKILL.md 原文主张「不把话说满」，与用户要求的「不许模棱两可」冲突，
+        // 这里锁死调和结果：留白只用于正文，结论必须给死。
+        assertTrue(p.contains("话说短，不等于含糊"))
+        assertTrue(p.contains("吉凶要明说"))
+    }
+
+    @Test
+    fun `老子风格禁止编造道德经原文`() {
+        val p = styled(DivinationSystem.LIU_YAO, InterpretationStyle.LAOZI)
+        // 0.8B 模型很容易把「原文」编得像模像样，必须显式禁掉
+        assertTrue(p.contains("不要背《道德经》原文"))
+    }
+
+    @Test
+    fun `风格只影响语气，不影响断法`() {
+        DivinationSystem.entries.forEach { s ->
+            val zeng = styled(s, InterpretationStyle.ZENG_SHIQIANG)
+            val laozi = styled(s, InterpretationStyle.LAOZI)
+            // 断法段 = 语气段开始之前的部分。语气段以各自的开场白起头，
+            // 所以按各自的锚点切，剩下的前缀必须逐字相同。
+            val headZeng = zeng.substringBefore("你是一位讲了一辈子")
+            val headLaozi = laozi.substringBefore("你是一个看惯了兴衰")
+            assertTrue("$s 的断法被风格改了", headZeng == headLaozi)
+            assertTrue("$s 断法段为空", headZeng.contains("【体系】"))
+        }
     }
 }

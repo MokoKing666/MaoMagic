@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.maohongyuan.magic.core.ai.LocalModel
 import com.maohongyuan.magic.core.interpret.InferencePrefs
+import com.maohongyuan.magic.core.interpret.InterpretationStyle
 import com.maohongyuan.magic.core.data.ColorScheme
 import com.maohongyuan.magic.core.data.GlassQuality
 import com.maohongyuan.magic.core.data.MagicSettings
@@ -208,6 +209,28 @@ fun SettingsScreen(
             MagicCaption(
                 InferencePrefs.BackendPref.of(settings.inferenceBackend).description
             )
+            Spacer(Modifier.height(MagicSpacing.cardPadding))
+
+            MagicLabel("解读风格")
+            Spacer(Modifier.height(MagicSpacing.row))
+            MagicLiquidSegmentedControl(
+                options = InterpretationStyle.entries.map { it.label },
+                selectedIndex = InterpretationStyle.entries
+                    .indexOf(InterpretationStyle.of(settings.interpretStyle)),
+                onSelect = {
+                    onChange(
+                        settings.copy(
+                            interpretStyle = InterpretationStyle.entries[it].name
+                        )
+                    )
+                },
+            )
+            Spacer(Modifier.height(MagicSpacing.xs))
+            MagicCaption(InterpretationStyle.of(settings.interpretStyle).description)
+            Spacer(Modifier.height(MagicSpacing.xs))
+            // 说清楚边界：规则引擎的文案是各系统写死的，换风格看不到变化。
+            // 不讲的话，没配 Key 的用户会以为这个开关坏了。
+            MagicCaption("只影响端上模型与云端 AI 的措辞；两者都不可用时会落到规则引擎，文案是固定的。")
             Spacer(Modifier.height(MagicSpacing.cardPadding))
 
             // 「模型变体」选择器已删除。

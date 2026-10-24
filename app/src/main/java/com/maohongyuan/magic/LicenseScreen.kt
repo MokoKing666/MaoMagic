@@ -146,6 +146,10 @@ fun LicenseScreen(onDismiss: () -> Unit) {
 
                             AndroidX / Jetpack Compose
                               Apache License 2.0
+
+                            chmxn/laozi-perspective
+                              「老子视角」解读风格的提示词（改编，无代码依赖）
+                              MIT License
                         """.trimIndent(),
                     )
 

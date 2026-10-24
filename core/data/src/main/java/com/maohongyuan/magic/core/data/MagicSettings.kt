@@ -78,6 +78,14 @@ data class MagicSettings(
     val inferenceBackend: String = "AUTO",
 
     /**
+     * 解卦的说话风格：ZENG_SHIQIANG / LAOZI。
+     *
+     * 只影响端上模型与云端 AI 两档的措辞 —— 规则引擎的文案是各系统写死的。
+     * 存字符串同理（枚举改名不炸旧数据），映射见 `InterpretationStyle.of()`。
+     */
+    val interpretStyle: String = "ZENG_SHIQIANG",
+
+    /**
      * 模型变体：AUTO / GPU / GENERIC / QUALCOMM_SM8750。
      *
      * 必须可手动选 —— 自动推荐只看 SoC，看不出「这台机器有没有 OpenCL」。

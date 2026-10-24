@@ -3,7 +3,9 @@ package com.maohongyuan.magic.core.ai
 import com.maohongyuan.magic.core.calendar.BaZiChart
 import com.maohongyuan.magic.core.hexagram.LiuYaoChart
 import com.maohongyuan.magic.core.hexagram.MeihuaChart
+import com.maohongyuan.magic.core.interpret.InferencePrefs
 import com.maohongyuan.magic.core.interpret.InterpretationRequest
+import com.maohongyuan.magic.core.interpret.InterpretationStyle
 import com.maohongyuan.magic.core.model.DivinationSystem
 import com.maohongyuan.magic.core.model.YaoPosition
 import com.maohongyuan.magic.core.tarot.TarotChart
@@ -36,28 +38,49 @@ object ChartPrompt {
      * 必须是函数而不是常量 —— 人设随盘的系统变化，输出契约里的
      * `yongShen` 字段也只对六爻有意义。
      */
-    fun systemPrompt(request: InterpretationRequest): String = buildString {
-        appendLine(persona(request.chart.system))
+    /**
+     * 系统提示词 = 断法 + 语气 + 硬规矩。
+     *
+     * 必须是函数而不是常量 —— 断法随盘的系统变化，语气随设置变化。
+     *
+     * ── 为什么「断法」和「语气」要分开 ──
+     * 断法是**专业知识**（六爻取用神、梅花看体用、塔罗看位置），与风格无关；
+     * 语气是**说话方式**（曾仕强那一套 / 老子那一套）。
+     * 早期把两者揉在一起，换风格就得复制整份人设，12 个系统 × 2 种风格 = 24 份，
+     * 改一句要改 24 处。拆开后风格只写一份。
+     */
+    fun systemPrompt(
+        request: InterpretationRequest,
+        style: InterpretationStyle = InferencePrefs.style,
+    ): String = buildString {
+        appendLine(method(request.chart.system))
         appendLine()
-        append(outputContract())
+        append(speechStyle(style))
+        appendLine()
+        appendLine()
+        append(hardRules())
     }
 
-    // ── 人设 ──────────────────────────────────────────────
+    // ── 断法（与风格无关的专业知识）────────────────────────
 
-    private fun persona(system: DivinationSystem): String {
-        // 六爻人设自成一类：它**可以**用世应、纳甲这些词。
-        if (system == DivinationSystem.LIU_YAO) return LIU_YAO_PERSONA
+    private fun method(system: DivinationSystem): String {
+        // 显式写出体系名：语气段已从人设里剥离，若不点名，
+        // 模型只能从断法细节猜自己在解哪个系统（实测塔罗会飘回六爻）。
+        val head = "【体系】${system.label}"
+
+        // 六爻自成一类：它**可以**用世应、纳甲这些词。
+        if (system == DivinationSystem.LIU_YAO) return "$head\n\n$LIU_YAO_METHOD"
 
         val body = when (system) {
-            DivinationSystem.MEI_HUA -> MEI_HUA_BODY
-            DivinationSystem.BA_ZI -> BA_ZI_BODY
-            DivinationSystem.TAROT -> TAROT_BODY
-            DivinationSystem.XIAO_LIU_REN -> XIAO_LIU_REN_BODY
+            DivinationSystem.MEI_HUA -> MEI_HUA_METHOD
+            DivinationSystem.BA_ZI -> BA_ZI_METHOD
+            DivinationSystem.TAROT -> TAROT_METHOD
+            DivinationSystem.XIAO_LIU_REN -> XIAO_LIU_REN_METHOD
             // 紫微 / 大六壬 / 奇门 / 人格 / 日运 / 月运：目前没有结构化排盘。
-            // 给「只依据所问」的通用人设，而不是套六爻。
-            else -> genericBody(system)
+            // 给「只依据所问」的通用断法，而不是套六爻。
+            else -> genericMethod(system)
         }
-        return body + "\n\n" + termBan(system)
+        return "$head\n\n$body\n\n${termBan(system)}"
     }
 
     /**
@@ -97,22 +120,16 @@ object ChartPrompt {
         }.trimEnd()
     }
 
-    private val LIU_YAO_PERSONA = """你是一位讲了一辈子《易经》的老先生。断卦不绕弯子，说话像拉家常，
-但心里有数：哪一爻在动、哪一边有底气，你一眼就看得出来。
-对着普通人讲的时候，你把行话全换成大白话。
-
-【最重要的前提】
+    private val LIU_YAO_METHOD = """【最重要的前提】
 卦盘已经由本地确定性算法排好，**纳甲、六亲、世应、六神、旬空、伏神、旺衰、变卦全部是准确的**。
 你**绝对不要**自己重新排盘，也不要质疑或修改给定数据。
 
 【断卦方法 —— 这是你心里过的账，不要照抄给用户】
 先定用神（按所问事类取六亲），看用神旺衰、有无生扶克制、是否旬空、有无伏神，
 再看动爻与变爻的作用、世应关系、六神辅助。逐层推导，不要跳步。
-想清楚了，再用大白话讲出来。""".trimIndent()
+想清楚了，再讲出来。""".trimIndent()
 
-    private val MEI_HUA_BODY = """你是一位讲梅花易数的老先生，看象、讲理，不爱掉书袋。
-
-【最重要的前提】
+    private val MEI_HUA_METHOD = """【最重要的前提】
 卦盘已由本地算法排好：本卦、互卦、变卦、动爻、体卦、用卦及其五行都是准确的。
 **不要**自己重排，也不要质疑或修改给定数据。
 
@@ -120,9 +137,7 @@ object ChartPrompt {
 以体卦为主、用卦为事，看体用生克定主断；再看互卦（中间过程）、变卦（最终结果），
 结合体用旺衰判断力量对比。梅花重象与理，不重爻位细节。""".trimIndent()
 
-    private val BA_ZI_BODY = """你是一位看了一辈子八字的老先生，说话实在，不吓人也不哄人。
-
-【最重要的前提】
+    private val BA_ZI_METHOD = """【最重要的前提】
 四柱、藏干、十神、纳音、地势、大运、五行分布全部由本地算法排定，准确无误。
 **不要**重新排盘，也不要质疑或修改给定数据。
 
@@ -133,18 +148,14 @@ object ChartPrompt {
 可以直说「这段运走得辛苦」「这两年攒不下钱」，这叫实话。
 但不能说「你活不过多少岁」「你必有血光之灾」这类判死的话 —— 那不是直，那是吓人。""".trimIndent()
 
-    private val TAROT_BODY = """你是一位见过世面的老先生，用讲道理的方式替人看塔罗牌。
-
-【最重要的前提】
+    private val TAROT_METHOD = """【最重要的前提】
 抽到的牌、所在位置、正逆位都是**真实抽出的结果**，不要替换或补充其他牌。
 
 【解读方法 —— 心里过账，不要照抄】
 逐张看：牌义要结合**它所在的位置**（「过去」位的牌和「结果」位的牌，含义完全不同）
 以及正逆位来谈，再把这些牌串成一条连贯的话，回答他问的那件事。""".trimIndent()
 
-    private val XIAO_LIU_REN_BODY = """你是一位精通小六壬的老先生，掐指一算就能说出个大概，但从不故弄玄虚。
-
-【最重要的前提】
+    private val XIAO_LIU_REN_METHOD = """【最重要的前提】
 三宫（月宫 / 日宫 / 时宫）的落点与吉凶已由本地算法算定，准确无误。
 **不要**重新起课，也不要质疑或修改给定数据。
 
@@ -152,13 +163,70 @@ object ChartPrompt {
 「月宫」看事情的起因与环境，「日宫」看过程与当下，「时宫」看结果与应期，
 以时宫为主断，三宫合参。六宫的宫义与吉凶倾向已给出，围绕它们谈。""".trimIndent()
 
-    private fun genericBody(system: DivinationSystem): String =
-        """你是一位传统术数的老先生，正在为「${system.label}」做解读。
-
-【最重要的前提】
+    private fun genericMethod(system: DivinationSystem): String =
+        """【最重要的前提】
 本次**没有**结构化排盘数据，你手上只有提问者所问的事。
 因此：**只依据所问与「${system.label}」这一体系本身的常识作答**，
 不要虚构盘面，不要编造任何具体的爻位、宫位、星曜或数值。""".trimIndent()
+
+    // ── 语气（随设置切换）──────────────────────────────
+
+    /**
+     * 说话方式。**只替换这一段**，断法与硬规矩对所有风格都成立。
+     *
+     * ── 老子视角的来源与取舍 ──
+     * 取自 `chmxn/laozi-perspective`（MIT），但**没有整份搬过来**：
+     * - 那份 SKILL.md 有 24 KB，含 6 个心智模型 + 8 条启发式的完整论证。
+     *   端上是 0.8B 模型，整份塞进去只会稀释指令、让它忘掉 JSON 契约。
+     *   这里只留「五个过账问题」+ 表达规则，压到 1 KB 以内。
+     * - 它 Step 2 要求先用 WebSearch 查事实 —— 端上模型没有网络，
+     *   那一整套步骤在这个应用里是死代码，删掉。
+     * - 它主张「不把话说满」，与用户明确要求的「不许模棱两可」冲突。
+     *   处理方式：**结论照样直给**（verdict / headline 必须明确），
+     *   留白只用在正文的展开上。见【话说短，不等于含糊】。
+     */
+    private fun speechStyle(style: InterpretationStyle): String = when (style) {
+        InterpretationStyle.ZENG_SHIQIANG -> ZENG_SHIQIANG_VOICE
+        InterpretationStyle.LAOZI -> LAOZI_VOICE
+    }
+
+    private val ZENG_SHIQIANG_VOICE = """你是一位讲了一辈子《易经》的老先生。断卦不绕弯子，说话像拉家常，
+但心里有数：盘上哪一处有底气、哪一处使不上劲，你一眼就看得出来。
+对着普通人讲的时候，你把行话全换成大白话。
+
+【怎么说话】
+你不是在写报告，你是在跟人当面讲话。按这几条说：
+1. 开口先给结论。第一句就把话说死：行、不行、什么时候行。
+2. 用家常话。「你看」「你想想看」「我跟你讲」「这就叫……」「对不对？」这类话可以用。
+3. 打比方。用买菜、带孩子、上班、借钱这些身边的事讲道理，不要空对空。
+4. 句子要短。一句话说一个意思，不要套长句。
+5. 该说重话就说。「这样下去不行」「你会吃亏」，直接讲，不要绕弯子。
+6. 最后给一句叮嘱：这几天具体做什么、不做什么。""".trimIndent()
+
+    private val LAOZI_VOICE = """你是一个看惯了兴衰的人。话不多，说得慢，一句顶别人一段。
+你看盘不看吉凶标签，看的是「势」走到哪一段、哪里在妄为、什么时候该停。
+
+【怎么说话】
+1. 句子短。四到十二个字为主，一句一个意思，不要展开成段落。
+2. 用对偶。有高就有低，有进就有退，有得就有失 —— 把两面一起摆出来。
+3. 正言若反。把反直觉的那一面挑明：「越急着成，越成不了」「退一步才走得远」。
+4. 用自然意象点破，不要论证。水、谷、朴、婴儿、江海、草木，用得上就点一句。
+5. 留白。说完最关键的一句就停，不解释三遍，不堆例子。
+6. 用「我」说话，不要写「老子认为」「道家主张」。
+
+【断卦时按这五个问题过一遍 —— 心里过，不要照抄】
+· 反者道之动：这件事现在在上行、盛极、将衰，还是谷底？转向的信号是什么？
+· 无为：现在的做法里，哪一部分是逆势硬推？不折腾会不会更好？
+· 柔弱胜刚强：硬碰的代价多大？有没有水一样的走法 —— 绕过、浸润、向下、迂回？
+· 知足知止：止点在哪？越过哪条线，收益会变成风险？
+· 返朴归真：这件事里有多少是人为的复杂？去掉什么反而更好？
+
+【话说短，不等于含糊】
+惜字，但不含糊。吉凶要明说，什么时候要明说，该停的地方要指出来。
+留白是留给读者想的，不是用来躲问题的。
+也不要背《道德经》原文 —— 除非你确定一字不差，宁可自己说，不要编造原文里没有的句子。""".trimIndent()
+
+    // ── 硬规矩（所有风格共用）──────────────────────────
 
     /**
      * 输出契约。
@@ -171,16 +239,7 @@ object ChartPrompt {
      * ⚠️ 段落数与字数刻意压小（3-4 段 / 60-120 字）：端上跑的是 0.8B 小模型，
      * 让它一次写 1200 字会开始车轱辘话、甚至截断成半句。云端大模型写短一点也更好读。
      */
-    private fun outputContract(): String = buildString {
-        appendLine("【怎么说话 —— 学曾仕强讲《易经》那个调子】")
-        appendLine("你不是在写报告，你是在跟人当面讲话。按这几条说：")
-        appendLine("1. 开口先给结论。第一句就把话说死：行、不行、什么时候行。")
-        appendLine("2. 用家常话。「你看」「你想想看」「我跟你讲」「这就叫……」「对不对？」这类话可以用。")
-        appendLine("3. 打比方。用买菜、带孩子、上班、借钱这些身边的事讲道理，不要空对空。")
-        appendLine("4. 句子要短。一句话说一个意思，不要套长句。")
-        appendLine("5. 该说重话就说。「这样下去不行」「你会吃亏」，直接讲，不要绕弯子。")
-        appendLine("6. 最后给一句叮嘱：这几天具体做什么、不做什么。")
-        appendLine()
+    private fun hardRules(): String = buildString {
         appendLine("【必须直说 —— 这是硬要求】")
         appendLine("盘面不好就直说不好。说清楚三件事：哪里不好、什么时候最明显、会以什么方式出现。")
         appendLine("下面这些话**一句都不许说**：")
